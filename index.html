@@ -809,9 +809,12 @@ function handleDrop(e){
 
 async function deletePhoto(id, url){
   if(!confirm('¿Eliminar esta foto?')) return;
-  await sb.from('photos').delete().eq('id',id);
+  await fetch(`${SURL}/rest/v1/photos?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`}
+  });
   toast('Foto eliminada');
-  renderSessionDetail();
+  await renderSessionDetail();
 }
 
 // ── SESSIONS ──
