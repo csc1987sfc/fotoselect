@@ -690,6 +690,32 @@ async function deleteSession(id, name){
   renderSessionsList();
 }
 
+async function copiarParaLightroom(){
+  const {data:favs} = await sbFrom('favorites').select('photo_id, photos(filename)').eq('client_id', 
+    (await sbFrom('clients').select('id').eq('session_id', currentSession.id)).data?.[0]?.id||'');
+  
+  // Get all favorites for this session
+  const {data:clients} = await sbFrom('clients').select('id').eq('session_id', currentSession.id);
+  if(!clients||clients.length===0){ toast('No hay clientes en esta sesión'); return; }
+  
+  const clientIds = clients.map(c=>c.id);
+  const {data:allFavs} = await sbFrom('favorites').select('photo_id').in('client_id', clientIds);
+  
+  if(!allFavs||allFavs.length===0){ toast('No hay fotos favoritas aún'); return; }
+  
+  const photoIds = [...new Set(allFavs.map(f=>f.photo_id))];
+  const {data:photos} = await sbFrom('photos').select('filename').in('id', photoIds);
+  
+  const names = (photos||[]).map(p=>p.filename||p.url?.split('/').pop()).filter(Boolean).join(', ');
+  
+  try{
+    await navigator.clipboard.writeText(names);
+    toast('¡Nombres copiados al portapapeles! (' + photoIds.length + ' fotos)');
+  }catch(e){
+    prompt('Copia estos nombres:', names);
+  }
+}
+
 async function openSession(id, name){
   currentSession = {id, name};
   renderSessionDetail();
@@ -746,13 +772,16 @@ async function renderSessionDetail(){
   html += `
     <div class="section-header" style="margin-top:48px">
       <span class="section-title">Clientes con acceso</span>
-      <button class="btn-gold" onclick="openNewClientModal()">+ Añadir cliente</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="copiarParaLightroom()" title="Copia los nombres de fotos favoritas al portapapeles">📋 Copiar para Lightroom</button>
+        <button class="btn-gold" onclick="openNewClientModal()">+ Añadir cliente</button>
+      </div>
     </div>`;
 
   if(!clients||clients.length===0){
     html += '<div class="empty"><p>Ningún cliente tiene acceso aún.</p></div>';
   } else {
-    html += '<table class="clients-table"><thead><tr><th>Nombre</th><th>Email</th><th>Contraseña</th><th>Favoritas</th><th></th></tr></thead><tbody>';
+    html += '<table class="clients-table"><thead><tr><th>Nombre</th><th>Email</th><th>Contraseña</th><th>Favoritas</th><th>Estado</th><th></th></tr></thead><tbody>';
     for(const c of clients){
       const {count:favCount} = await sb.from('favorites').select('*',{count:'exact',head:true}).eq('client_id',c.id);
       html += `<tr>
@@ -760,6 +789,7 @@ async function renderSessionDetail(){
         <td>${escHtml(c.email)}</td>
         <td style="font-family:monospace;font-size:12px;color:var(--muted)">${escHtml(c.password_hash)}</td>
         <td><span style="color:var(--gold)">${favCount||0}</span> fotos</td>
+        <td>${c.selection_done ? '<span style="color:var(--gold);font-size:11px">✓ Finalizado</span>' : '<span style="color:var(--muted);font-size:11px">Pendiente</span>'}</td>
         <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar</button></td>
       </tr>`;
     }
@@ -770,15 +800,36 @@ async function renderSessionDetail(){
 }
 
 // ── UPLOAD TO CLOUDINARY ──
+async function compressImage(file, maxPx=2000, quality=0.80){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      URL.revokeObjectURL(url);
+      let {width:w, height:h} = img;
+      if(w>maxPx||h>maxPx){
+        if(w>h){ h=Math.round(h*maxPx/w); w=maxPx; }
+        else{ w=Math.round(w*maxPx/h); h=maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>resolve(new File([blob],file.name,{type:'image/jpeg'})),'image/jpeg',quality);
+    };
+    img.src=url;
+  });
+}
+
 async function uploadToCloudinary(file){
+  const compressed = await compressImage(file);
   const fd = new FormData();
-  fd.append('file', file);
+  fd.append('file', compressed);
   fd.append('upload_preset', UPLOAD_PRESET);
   fd.append('folder', `fotoselect/${currentSession.id}`);
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {method:'POST',body:fd});
   if(!res.ok) throw new Error('Error subiendo a Cloudinary');
   const data = await res.json();
-  return data.secure_url;
+  return {url: data.secure_url, filename: file.name};
 }
 
 async function handleFiles(files){
@@ -790,8 +841,8 @@ async function handleFiles(files){
   let done=0;
   for(const f of arr){
     try{
-      const url = await uploadToCloudinary(f);
-      await sb.from('photos').insert({session_id:currentSession.id, url, filename:f.name});
+      const {url, filename} = await uploadToCloudinary(f);
+      await sbFrom('photos').insert({session_id:currentSession.id, url, filename});
     }catch(e){ toast('Error subiendo '+f.name); }
     done++;
     fill.style.width=(done/arr.length*100)+'%';
@@ -878,8 +929,12 @@ async function renderClientGallery(){
       <h2>Hola, <em>${escHtml(currentClientRow.name)}</em></h2>
       <p>${escHtml(session?.name||'')} ${session?.description ? '· '+escHtml(session.description) : ''}</p>
     </div>
-    <div style="text-align:center">
-      <div class="fav-counter">❤ Fotos favoritas: <strong>${favSet.size}</strong> de ${(photos||[]).length}</div>
+    <div style="text-align:center;margin-bottom:24px">
+      <div class="fav-counter" id="fav-counter-box">❤ Has seleccionado <strong id="fav-count-num">${favSet.size}</strong> de ${(photos||[]).length} fotos</div>
+      ${currentClientRow.selection_done ? 
+        `<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada</div>` :
+        `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccion()" style="margin-top:16px;max-width:280px;margin-left:auto;margin-right:auto;display:block">Finalizar selección</button>`
+      }
     </div>
     <div class="client-grid">`;
 
@@ -918,6 +973,19 @@ function showClientLb(){
 document.getElementById('lb-prev').addEventListener('click',()=>{ clientLbIndex--; showClientLb(); });
 document.getElementById('lb-next').addEventListener('click',()=>{ clientLbIndex++; showClientLb(); });
 
+async function finalizarSeleccion(){
+  if(!confirm('¿Confirmas que has terminado de seleccionar tus fotos favoritas? El fotógrafo recibirá tu selección.')) return;
+  await fetch(`${SURL}/rest/v1/clients?id=eq.${currentClientRow.id}`, {
+    method: 'PATCH',
+    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation'},
+    body: JSON.stringify({selection_done: true, selection_done_at: new Date().toISOString()})
+  });
+  currentClientRow.selection_done = true;
+  const btn = document.getElementById('btn-finalizar');
+  if(btn) btn.outerHTML = '<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada — gracias</div>';
+  toast('¡Selección enviada al fotógrafo!');
+}
+
 async function toggleFav(photoId){
   const favs = await sbFrom('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
   const card = document.getElementById('cp-'+photoId);
@@ -936,7 +1004,7 @@ async function toggleFav(photoId){
   }
   // update counter
   const newFavs = await sbFrom('favorites').select('photo_id').eq('client_id',currentClientRow.id);
-  const counter = document.querySelector('.fav-counter strong');
+  const counter = document.getElementById('fav-count-num');
   if(counter) counter.textContent = (newFavs.data||[]).length;
 }
 
