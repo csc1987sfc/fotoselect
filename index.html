@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -13,10 +12,6 @@ const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
 let _session = null;
 let _authListeners = [];
-
-// Variables globales para la app
-let currentSessionId = null;
-let currentSessionPhotos = [];
 
 function _saveSession(s){ _session=s; if(s) localStorage.setItem('sb_session',JSON.stringify(s)); else localStorage.removeItem('sb_session'); }
 function _loadSession(){ if(!_session){ const s=localStorage.getItem('sb_session'); if(s) try{ _session=JSON.parse(s); }catch(e){} } return _session; }
@@ -100,93 +95,8 @@ function sbFrom(table){
   return b;
 }
 
+// Main sb object
 const sb = { auth: sbAuth, from: sbFrom };
-
-// ── 1. FUNCIÓN DE COMPRESIÓN LOCAL AUTOMÁTICA (MÁX 2000PX) ──
-async function comprimirImagen(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const MAX_SIZE = 2000;
-
-        if (width > height && width > MAX_SIZE) {
-          height *= MAX_SIZE / width;
-          width = MAX_SIZE;
-        } else if (height > MAX_SIZE) {
-          width *= MAX_SIZE / height;
-          height = MAX_SIZE;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          const compressedFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
-          resolve(compressedFile);
-        }, 'image/jpeg', 0.8);
-      };
-    };
-  });
-}
-
-// ── 2. ACTUALIZACIÓN DEL CONTADOR DE SELECCIÓN DINÁMICA ──
-function actualizarContadorFavoritos() {
-  const contadorHtml = document.getElementById('fav-counter-text');
-  if (contadorHtml) {
-    const seleccionadas = currentSessionPhotos.filter(p => p.is_favorite).length;
-    const total = currentSessionPhotos.length;
-    contadorHtml.innerHTML = `Has seleccionado <strong>${seleccionadas}</strong> de ${total} fotos`;
-  }
-}
-
-// ── 3. ACCIÓN DE FINALIZACIÓN DE SELECCIÓN ──
-async function finalizarSeleccionCliente() {
-  if (!currentSessionId) return;
-  if (!confirm('¿Estás seguro de que deseas dar por finalizada la selección de imágenes? Tu fotógrafo será notificado.')) return;
-  
-  const { error } = await sb.from('sessions').update({ status: 'finalized' }).eq('id', currentSessionId);
-  if (error) {
-    showToast('Error al guardar el estado en el servidor');
-  } else {
-    showToast('¡Selección finalizada correctamente!');
-    setTimeout(() => location.reload(), 1500);
-  }
-}
-
-// ── 4. COPIAR ETIQUETAS DE NOMBRES PARA ADOBE LIGHTROOM ──
-function copiarNombresLightroom() {
-  const favoritas = currentSessionPhotos.filter(p => p.is_favorite);
-  if (favoritas.length === 0) {
-    showToast('No hay ninguna fotografía seleccionada actualmente');
-    return;
-  }
-  const nombres = favoritas.map(p => p.name || p.file_name || "").filter(n => n).join(', ');
-  navigator.clipboard.writeText(nombres);
-  showToast('¡Nombres de archivo copiados para Lightroom!');
-}
-
-// Funciones globales de ayuda para la UI
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  if(t) { t.innerText = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-}
-
-function switchTab(tab) {
-  document.getElementById('tab-login').style.display = tab === 'login' ? 'block' : 'none';
-  document.getElementById('tab-register').style.display = tab === 'register' ? 'block' : 'none';
-  const tabs = document.querySelectorAll('.auth-tab');
-  tabs[0].classList.toggle('active', tab === 'login');
-  tabs[1].classList.toggle('active', tab === 'register');
-}
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -355,7 +265,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .code-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
 .code-item:last-child{border-bottom:none}
 .code-badge{font-family:monospace;background:var(--surface2);padding:4px 10px;border-radius:var(--r);font-size:13px;letter-spacing:0.05em;color:var(--gold)}
-.code-used{opacity:.4;text-decoration-line-through}
+.code-used{opacity:.4;text-decoration:line-through}
 .ph-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
 .ph-item:last-child{border-bottom:none}
 @media(max-width:700px){.admin-grid{grid-template-columns:1fr}}
@@ -404,133 +314,711 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
       <div class="auth-tab" onclick="switchTab('register')">Registrarse</div>
     </div>
 
-    <!-- Login Area -->
     <div id="tab-login">
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="login-email" placeholder="tu@email.com"/>
-      </div>
-      <div class="field">
-        <label>Contraseña</label>
-        <input type="password" id="login-password" placeholder="••••••••"/>
+      <div class="role-selector">
+        <div class="role-btn active" onclick="setRole('photographer',this)">📷 Fotógrafo</div>
+        <div class="role-btn" onclick="setRole('client',this)">👤 Cliente</div>
       </div>
       <div class="err" id="login-err"></div>
-      <button class="btn-primary" id="btn-login-submit">Acceder</button>
+      <div class="field"><label>Email</label><input type="email" id="login-email" placeholder="tu@email.com"/></div>
+      <div class="field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••"/></div>
+      <button class="btn-primary" onclick="handleLogin()">Entrar</button>
     </div>
 
-    <!-- Register Area -->
-    <div id="tab-register" style="display:none;">
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="tu@email.com"/>
-      </div>
-      <div class="field">
-        <label>Contraseña</label>
-        <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres"/>
-      </div>
+    <div id="tab-register" style="display:none">
       <div class="err" id="reg-err"></div>
-      <button class="btn-primary" id="btn-reg-submit">Crear Cuenta</button>
+      <div class="field"><label>Código de invitación</label><input type="text" id="reg-code" placeholder="Código que te proporcionó el administrador"/></div>
+      <div class="field"><label>Nombre</label><input type="text" id="reg-name" placeholder="Tu nombre o estudio"/></div>
+      <div class="field"><label>Email</label><input type="email" id="reg-email" placeholder="tu@email.com"/></div>
+      <div class="field"><label>Contraseña</label><input type="password" id="reg-pass" placeholder="Mínimo 6 caracteres"/></div>
+      <button class="btn-primary" onclick="handleRegister()">Crear cuenta de fotógrafo</button>
+      <p class="auth-switch">¿Ya tienes cuenta? <a onclick="switchTab('login')">Entra aquí</a></p>
     </div>
   </div>
 </div>
 
-<!-- HEADER GENERAL -->
-<header id="main-header" class="app-header" style="display:none;">
-  <div class="app-logo">Foto<span>Select</span></div>
-  <div class="header-right">
-    <span class="user-badge" id="header-user-email"></span>
-    <button class="btn-sm danger" id="btn-logout">Salir</button>
-  </div>
-</header>
-
-<!-- PHOTOGRAPHER PANEL -->
+<!-- PHOTOGRAPHER -->
 <div id="screen-photographer" class="screen">
-  <div class="dash-body">
-    <h2 class="dash-title">Panel de <em>Fotógrafo</em></h2>
-    <p class="dash-sub">Gestiona tus sesiones fotográficas y selecciones de clientes.</p>
-    
-    <div class="section-header">
-      <h3 class="section-title">Tus Sesiones</h3>
-      <button class="btn-gold" id="btn-new-session">+ Nueva Sesión</button>
+  <header class="app-header">
+    <div class="app-logo">Foto<span>Select</span></div>
+    <div class="header-right">
+      <span class="user-badge" id="ph-user-badge"></span>
+      <button class="btn-sm" id="admin-btn" style="display:none;border-color:var(--gold);color:var(--gold)" onclick="showScreen('admin');renderAdminPanel()">⚙ Admin</button>
+      <button class="btn-sm" onclick="openNewSessionModal()">+ Nueva sesión</button>
+      <button class="btn-sm danger" onclick="logout()">Salir</button>
     </div>
-    
-    <div class="sessions-grid" id="sessions-container">
-      <!-- Dinámico -->
-    </div>
+  </header>
 
-    <!-- Detalle de Sesión (Oculto por defecto) -->
-    <div id="session-detail-container" style="display:none;">
-      <div class="back-btn" id="btn-back-dashboard">← Volver al listado</div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <h3 class="section-title" id="detail-session-title">Sesión</h3>
-        <!-- BOTÓN DE ADOBE LIGHTROOM INTEGRADO -->
-        <button class="btn-sm" style="border-color: var(--gold); color: var(--gold);" onclick="copiarNombresLightroom()">
-          📷 Copiar nombres para Lightroom
-        </button>
-      </div>
-
-      <div class="upload-zone">
-        <input type="file" id="upload-input" multiple accept="image/*"/>
-        <p>Arrastra tus imágenes aquí o <u>haz clic para buscar</u></p>
-        <small>Las imágenes serán optimizadas localmente antes de subirse automáticamente</small>
-      </div>
-
-      <div class="prog-bar" id="upload-progress-bar"><div class="prog-fill" id="upload-progress-fill"></div></div>
-      <div class="photo-grid" id="photographer-photos-container"></div>
-    </div>
+  <div class="dash-body" id="ph-body">
+    <!-- sessions list or session detail injected here -->
   </div>
 </div>
 
-<!-- CLIENT PANEL -->
+<!-- CLIENT -->
 <div id="screen-client" class="screen">
-  <div class="client-body">
-    <div class="client-hero">
-      <h2 id="client-gallery-title">Tu Galería de <em>Fotografías</em></h2>
-      <p>Selecciona tus imágenes preferidas haciendo clic en el corazón de cada una.</p>
+  <header class="app-header">
+    <div class="app-logo">Foto<span>Select</span></div>
+    <div class="header-right">
+      <span class="user-badge" id="cl-user-badge"></span>
+      <button class="btn-sm danger" onclick="logout()">Salir</button>
     </div>
-    
-    <div style="text-align:center;">
-      <!-- CONTADOR DE FOTOS DINÁMICO -->
-      <div class="fav-counter" id="fav-counter-text">
-        Calculando selección de imágenes...
-      </div>
-      <!-- BOTÓN DE FINALIZAR SELECCIÓN -->
-      <button class="btn-sm" style="background: var(--gold); color: #0f0e0c; font-weight: 500; margin-bottom: 32px; margin-left: 10px;" onclick="finalizarSeleccionCliente()">
-        ✓ Finalizar Selección
-      </button>
-    </div>
+  </header>
+  <div class="client-body" id="cl-body"></div>
+</div>
 
-    <div class="client-grid" id="client-photos-container">
-      <!-- Dinámico -->
+<!-- ADMIN SCREEN -->
+<div id="screen-admin" class="screen">
+  <header class="app-header">
+    <div class="app-logo">Foto<span>Select</span> <span style="font-size:10px;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase">Admin</span></div>
+    <div class="header-right">
+      <button class="btn-sm danger" onclick="logout()">Salir</button>
     </div>
+  </header>
+  <div class="dash-body" id="admin-body"></div>
+</div>
+
+<!-- MODAL: Nueva sesión -->
+<div class="modal-bg" id="modal-session">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-session')">×</button>
+    <h3>Nueva sesión</h3>
+    <div class="err" id="session-err"></div>
+    <div class="field"><label>Nombre de la sesión</label><input type="text" id="session-name" placeholder="Ej: Boda Ana & Luis"/></div>
+    <div class="field"><label>Descripción (opcional)</label><input type="text" id="session-desc" placeholder="Ej: Boda en Sevilla, Junio 2026"/></div>
+    <button class="btn-primary" onclick="createSession()">Crear sesión</button>
   </div>
 </div>
 
-<!-- TOAST NOTIFICATIONS -->
+<!-- MODAL: Nuevo cliente -->
+<div class="modal-bg" id="modal-client">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-client')">×</button>
+    <h3>Añadir cliente</h3>
+    <div class="err" id="client-err"></div>
+    <div class="field"><label>Nombre del cliente</label><input type="text" id="client-name" placeholder="Ej: Ana García"/></div>
+    <div class="field"><label>Email (será su usuario)</label><input type="email" id="client-email" placeholder="cliente@email.com"/></div>
+    <div class="field"><label>Contraseña para el cliente</label><input type="text" id="client-pass" placeholder="Ej: boda2026"/></div>
+    <button class="btn-primary" onclick="createClient()">Crear acceso</button>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+  <button class="lb-close" onclick="closeLightbox()">×</button>
+  <img id="lb-img" src="" alt=""/>
+</div>
+
 <div id="toast"></div>
 
 <script>
-// Manejadores de eventos de UI y subidas (puedes enlazar aquí tus lógicas de Cloudinary)
-document.getElementById('upload-input')?.addEventListener('change', async (e) => {
-  const files = e.target.files;
-  if(!files.length) return;
-  
-  const progressBar = document.getElementById('upload-progress-bar');
-  const progressFill = document.getElementById('upload-progress-fill');
-  if(progressBar) progressBar.style.display = 'block';
+// ── CONFIG ──
+const CLOUD_NAME  = 'dgp3tlqtq';
+const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVycGpubWJoaGJ6ZWlya3RwemN2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTY0NTc0NCwiZXhwIjoyMDk1MjIxNzQ0fQ.p1__AJPv8J-PqLXMAuAKC2of8n_oKVVMr854njdVwqg';
+const UPLOAD_PRESET = 'fotoselect';
+const ADMIN_ID = 'b28dcf3d-7d71-40f2-87f0-148d294b2328'; // Tu ID de administrador
 
-  for(let i=0; i<files.length; i++){
-    // COMPRESIÓN ACTIVA ANTES DE SUBIR
-    showToast(`Optimizando imagen ${i+1} de ${files.length}...`);
-    let archivoOptimizado = await comprimirImagen(files[i]);
-    
-    // Aquí ejecutas tu lógica de envío a Cloudinary usando 'archivoOptimizado'
-    if(progressFill) progressFill.style.width = `${((i+1)/files.length)*100}%`;
+// ── STATE ──
+let currentUser = null;
+let currentRole = 'photographer'; // 'photographer' | 'client'
+let currentSession = null; // for photographer detail view
+let dashboardLoaded = false;
+let currentClientRow = null; // for client view
+
+// ── TOAST ──
+let toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
+
+// ── SCREENS ──
+function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+id).classList.add('active'); }
+
+// ── AUTH TAB ──
+function switchTab(t){
+  document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('active', (i===0&&t==='login')||(i===1&&t==='register')));
+  document.getElementById('tab-login').style.display = t==='login'?'':'none';
+  document.getElementById('tab-register').style.display = t==='register'?'':'none';
+}
+function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); }
+function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
+function hideErr(id){ document.getElementById(id).classList.remove('show'); }
+
+// ── REGISTER (photographer only) ──
+async function handleRegister(){
+  hideErr('reg-err');
+  const name=document.getElementById('reg-name').value.trim();
+  const email=document.getElementById('reg-email').value.trim();
+  const pass=document.getElementById('reg-pass').value;
+  if(!name||!email||!pass){ showErr('reg-err','Rellena todos los campos'); return; }
+  const btn=document.querySelector('#tab-register .btn-primary');
+  btn.disabled=true; btn.textContent='Creando cuenta…';
+  const {data,error} = await sb.auth.signUp({email,password:pass,options:{data:{name,role:'photographer'}}});
+  btn.disabled=false; btn.textContent='Crear cuenta de fotógrafo';
+  if(error){ showErr('reg-err',error.message); return; }
+  // update profile name
+  await sb.from('profiles').update({name}).eq('id',data.user.id);
+  toast('¡Cuenta creada! Revisa tu email para confirmarla');
+  switchTab('login');
+}
+
+// ── LOGIN ──
+async function handleLogin(){
+  hideErr('login-err');
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  if(!email||!pass){ showErr('login-err','Introduce email y contraseña'); return; }
+  const btn=document.querySelector('#tab-login .btn-primary');
+  btn.disabled=true; btn.textContent='Entrando…';
+
+  if(currentRole==='photographer'){
+    const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
+    btn.disabled=false; btn.textContent='Entrar';
+    if(error){ showErr('login-err','Email o contraseña incorrectos'); return; }
+    currentUser = data.user;
+    // Check if account is active
+    const {data:profile} = await sbFrom('profiles').select('active').eq('id',currentUser.id).single();
+    if(profile && profile.active === false){ 
+      await sb.auth.signOut();
+      currentUser = null;
+      showErr('login-err','Tu cuenta ha sido desactivada. Contacta con el administrador.');
+      return;
+    }
+    console.log('Login OK, user id:', currentUser.id, 'admin?', currentUser.id===ADMIN_ID);
+    await loadPhotographerDashboard();
+  } else {
+    // client login: check clients table
+    const {data:clients,error} = await sb.from('clients').select('*').eq('email',email);
+    btn.disabled=false; btn.textContent='Entrar';
+    if(error||!clients||clients.length===0){ showErr('login-err','Cliente no encontrado'); return; }
+    // simple password check (stored as plain for demo; in production use bcrypt via edge function)
+    const client = clients.find(c=>c.password_hash===pass);
+    if(!client){ showErr('login-err','Contraseña incorrecta'); return; }
+    currentClientRow = client;
+    await loadClientView();
   }
-  
-  setTimeout(() => { if(progressBar) progressBar.style.display = 'none'; }, 1000);
-});
-</script>
+}
 
+function logout(){
+  sb.auth.signOut();
+  currentUser=null; currentClientRow=null; currentSession=null; dashboardLoaded=false;
+  showScreen('auth');
+}
+
+// ══════════════════════════════════
+// ADMIN PANEL
+// ══════════════════════════════════
+async function loadPhotographerDashboard2(){
+  showScreen('photographer');
+  const {data:profile} = await sbFrom('profiles').select('name').eq('id',currentUser.id).single();
+  document.getElementById('ph-user-badge').textContent = profile?.name || currentUser.email;
+  setTimeout(()=>{ 
+    const btn=document.getElementById('admin-btn'); 
+    if(btn) btn.style.display=''; 
+  }, 100);
+  currentSession = null;
+  renderSessionsList();
+}
+
+async function renderAdminPanel(){
+  const body = document.getElementById('admin-body');
+  body.innerHTML = '<div class="loading">Cargando panel…</div>';
+  const [{data:codes},{data:photographers}] = await Promise.all([
+    sbFrom('invite_codes').select('*').order('created_at',{ascending:false}),
+    sbFrom('profiles').select('*').order('created_at',{ascending:false})
+  ]);
+
+  let codesHtml = '';
+  (codes||[]).forEach(c=>{
+    codesHtml += `<div class="code-item ${c.used?'code-used':''}">
+      <span class="code-badge">${escHtml(c.code)}</span>
+      <span style="font-size:11px;color:var(--muted)">${c.email||'Sin email'}</span>
+      <span style="font-size:11px;color:${c.used?'var(--muted)':'var(--gold)'}">${c.used?'Usado':'Disponible'}</span>
+      <button class="btn-sm danger" onclick="deleteCode('${c.id}')">×</button>
+    </div>`;
+  });
+
+  let phHtml = '';
+  (photographers||[]).filter(p=>p.id!==ADMIN_ID).forEach(p=>{
+    const isActive = p.active !== false;
+    phHtml += `<div class="ph-item">
+      <div>
+        <div style="font-weight:500">${escHtml(p.name||'Sin nombre')} ${!isActive?'<span style="color:var(--accent);font-size:10px;letter-spacing:0.1em">DESACTIVADO</span>':''}</div>
+        <div style="font-size:11px;color:var(--muted)">${escHtml(p.email||'')}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">${new Date(p.created_at).toLocaleDateString('es-ES')}</div>
+      ${isActive 
+        ? `<button class="btn-sm danger" onclick="deletePhotographer('${p.id}')">Desactivar</button>`
+        : `<button class="btn-gold" style="font-size:10px;padding:5px 12px" onclick="activatePhotographer('${p.id}')">Activar</button>`
+      }
+    </div>`;
+  });
+
+  body.innerHTML = `
+    <div class="back-btn" onclick="loadPhotographerDashboard2()">← Volver al estudio</div>
+    <h2 class="dash-title">Panel de <em>administración</em></h2>
+    <p class="dash-sub">Gestiona fotógrafos y códigos de acceso</p>
+    <div class="admin-grid">
+      <div class="admin-card">
+        <h3>Códigos de invitación</h3>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input type="text" id="new-code-email" class="search-input" placeholder="Email del fotógrafo (opcional)" style="flex:1"/>
+          <button class="btn-gold" onclick="generateCode()">+ Generar</button>
+        </div>
+        ${codesHtml||'<p style="color:var(--muted);font-size:12px">No hay códigos aún</p>'}
+      </div>
+      <div class="admin-card">
+        <h3>Fotógrafos registrados</h3>
+        ${phHtml||'<p style="color:var(--muted);font-size:12px">No hay fotógrafos aún</p>'}
+      </div>
+    </div>`;
+}
+
+function generateRandomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code='';
+  for(let i=0;i<8;i++) code+=chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+async function generateCode(){
+  const email = document.getElementById('new-code-email').value.trim();
+  const code = generateRandomCode();
+  await sbFrom('invite_codes').insert({code, email:email||null, used:false});
+  toast(`Código ${code} creado ✓`);
+  renderAdminPanel();
+}
+
+async function deleteCode(id){
+  if(!confirm('¿Eliminar este código?')) return;
+  await sbFrom('invite_codes').eq('id',id).delete();
+  toast('Código eliminado');
+  await new Promise(r=>setTimeout(r,800));
+  showScreen('admin');
+  await renderAdminPanel();
+}
+
+async function deletePhotographer(id){
+  if(!confirm('¿Desactivar este fotógrafo? No podrá entrar en la app.')) return;
+  await sbFrom('profiles').eq('id',id).update({active: false});
+  toast('Fotógrafo desactivado ✓');
+  await new Promise(r=>setTimeout(r,800));
+  showScreen('admin');
+  await renderAdminPanel();
+}
+
+async function activatePhotographer(id){
+  await sbFrom('profiles').eq('id',id).update({active: true});
+  toast('Fotógrafo activado ✓');
+  await new Promise(r=>setTimeout(r,800));
+  showScreen('admin');
+  await renderAdminPanel();
+}
+
+// ── CHECK SESSION ON LOAD ──
+(async()=>{
+  const {data:{session}} = await sb.auth.getSession();
+  if(session){ 
+    currentUser=session.user; 
+    console.log('Session restored, user id:', currentUser.id, 'admin?', currentUser.id===ADMIN_ID);
+    await loadPhotographerDashboard(); 
+  } else {
+    showScreen('auth');
+  }
+})();
+
+sb.auth.onAuthStateChange(async(event,session)=>{
+  // Only handle token refresh, not initial login (handled by login function)
+  if(event==='TOKEN_REFRESHED'&&session){
+    currentUser=session.user;
+  }
+});
+
+// ══════════════════════════════════
+// PHOTOGRAPHER DASHBOARD
+// ══════════════════════════════════
+async function loadPhotographerDashboard(){
+  showScreen('photographer');
+  const {data:profile} = await sb.from('profiles').select('name').eq('id',currentUser.id).single();
+  document.getElementById('ph-user-badge').textContent = profile?.name || currentUser.email;
+  currentSession = null;
+  renderSessionsList();
+}
+
+async function renderSessionsList(){
+  const body = document.getElementById('ph-body');
+  body.innerHTML = '<div class="loading">Cargando sesiones…</div>';
+  const {data:sessions} = await sb.from('sessions').select('*').eq('photographer_id',currentUser.id).order('created_at',{ascending:false});
+
+  const isAdmin = currentUser && currentUser.id.trim()===ADMIN_ID.trim();
+  let html = `
+    <h2 class="dash-title">Tu <em>estudio</em></h2>
+    <p class="dash-sub">Gestiona tus sesiones y clientes</p>
+    ${isAdmin ? `<div style="margin-bottom:20px"><button class="btn-gold" onclick="showScreen('admin');renderAdminPanel()" style="background:transparent;border:1px solid var(--gold);color:var(--gold)">⚙ Panel de administración</button></div>` : ''}
+    <div class="section-header">
+      <span class="section-title">Sesiones fotográficas</span>
+      <button class="btn-gold" onclick="openNewSessionModal()">+ Nueva sesión</button>
+    </div>`;
+
+  if(!sessions||sessions.length===0){
+    html += '<div class="empty"><p style="font-size:2rem">📷</p><p>Aún no tienes sesiones. Crea la primera.</p></div>';
+  } else {
+    html += '<div class="sessions-grid">';
+    for(const s of sessions){
+      const {count:photoCount} = await sb.from('photos').select('*',{count:'exact',head:true}).eq('session_id',s.id);
+      const {count:clientCount} = await sb.from('clients').select('*',{count:'exact',head:true}).eq('session_id',s.id);
+      html += `
+        <div class="session-card" onclick="openSession('${s.id}','${escHtml(s.name)}')">
+          <h3>${escHtml(s.name)}</h3>
+          <p>${escHtml(s.description||'Sin descripción')}</p>
+          <div class="session-meta">
+            <div><span>${photoCount||0}</span> fotos</div>
+            <div><span>${clientCount||0}</span> clientes</div>
+            <div style="margin-left:auto"><button class="btn-sm danger" onclick="event.stopPropagation();deleteSession('${s.id}','${escHtml(s.name)}')" style="font-size:10px;padding:4px 10px">Eliminar</button></div>
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function deleteSession(id, name){
+  if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
+  await sbFrom('clients').eq('session_id',id).delete();
+  await sbFrom('photos').eq('session_id',id).delete();
+  await sbFrom('sessions').eq('id',id).delete();
+  await new Promise(r=>setTimeout(r,500));
+  toast('Sesión eliminada ✓');
+  renderSessionsList();
+}
+
+async function copiarParaLightroom(){
+  const {data:favs} = await sbFrom('favorites').select('photo_id, photos(filename)').eq('client_id', 
+    (await sbFrom('clients').select('id').eq('session_id', currentSession.id)).data?.[0]?.id||'');
+  
+  // Get all favorites for this session
+  const {data:clients} = await sbFrom('clients').select('id').eq('session_id', currentSession.id);
+  if(!clients||clients.length===0){ toast('No hay clientes en esta sesión'); return; }
+  
+  const clientIds = clients.map(c=>c.id);
+  const {data:allFavs} = await sbFrom('favorites').select('photo_id').in('client_id', clientIds);
+  
+  if(!allFavs||allFavs.length===0){ toast('No hay fotos favoritas aún'); return; }
+  
+  const photoIds = [...new Set(allFavs.map(f=>f.photo_id))];
+  const {data:photos} = await sbFrom('photos').select('filename').in('id', photoIds);
+  
+  const names = (photos||[]).map(p=>p.filename||p.url?.split('/').pop()).filter(Boolean).join(', ');
+  
+  try{
+    await navigator.clipboard.writeText(names);
+    toast('¡Nombres copiados al portapapeles! (' + photoIds.length + ' fotos)');
+  }catch(e){
+    prompt('Copia estos nombres:', names);
+  }
+}
+
+async function openSession(id, name){
+  currentSession = {id, name};
+  renderSessionDetail();
+}
+
+async function renderSessionDetail(){
+  const body = document.getElementById('ph-body');
+  body.innerHTML = '<div class="loading">Cargando sesión…</div>';
+
+  const [{data:photos},{data:clients}] = await Promise.all([
+    sb.from('photos').select('*').eq('session_id',currentSession.id).order('created_at',{ascending:false}),
+    sb.from('clients').select('*').eq('session_id',currentSession.id)
+  ]);
+
+  // Get favorites per photo
+  const {data:favs} = await sb.from('favorites').select('photo_id, client_id, clients(name)').in('photo_id',(photos||[]).map(p=>p.id));
+  const favMap = {};
+  (favs||[]).forEach(f=>{ if(!favMap[f.photo_id]) favMap[f.photo_id]=[]; favMap[f.photo_id].push(f.clients?.name||'cliente'); });
+
+  let html = `
+    <div class="back-btn" onclick="renderSessionsList()">← Volver a sesiones</div>
+    <h2 class="dash-title"><em>${escHtml(currentSession.name)}</em></h2>
+    <p class="dash-sub" style="margin-bottom:32px">${(photos||[]).length} fotos · ${(clients||[]).length} clientes</p>
+
+    <!-- UPLOAD -->
+    <div class="upload-zone" id="upload-zone" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)">
+      <input type="file" accept="image/*" multiple onchange="handleFiles(this.files)"/>
+      <p>📤 Arrastra fotos o <u>haz clic para subir</u></p>
+      <small>JPG, PNG, WEBP · Las fotos se suben a Cloudinary</small>
+    </div>
+    <div class="prog-bar" id="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
+
+    <!-- PHOTOS -->
+    <div class="section-header">
+      <span class="section-title">Fotos de la sesión</span>
+    </div>`;
+
+  if(!photos||photos.length===0){
+    html += '<div class="empty"><p>Aún no hay fotos en esta sesión.</p></div>';
+  } else {
+    html += '<div class="photo-grid">';
+    for(const p of photos){
+      const favNames = favMap[p.id];
+      html += `<div class="photo-item">
+        <img src="${p.url}" alt="${escHtml(p.filename||'')}" onclick="openLightbox('${p.url}')" loading="lazy"/>
+        ${favNames ? `<div class="fav-badge">❤ ${favNames.join(', ')}</div>` : ''}
+        <button class="del-btn" onclick="deletePhoto('${p.id}','${p.url}')">×</button>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // CLIENTS
+  html += `
+    <div class="section-header" style="margin-top:48px">
+      <span class="section-title">Clientes con acceso</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="copiarParaLightroom()" title="Copia los nombres de fotos favoritas al portapapeles">📋 Copiar para Lightroom</button>
+        <button class="btn-gold" onclick="openNewClientModal()">+ Añadir cliente</button>
+      </div>
+    </div>`;
+
+  if(!clients||clients.length===0){
+    html += '<div class="empty"><p>Ningún cliente tiene acceso aún.</p></div>';
+  } else {
+    html += '<table class="clients-table"><thead><tr><th>Nombre</th><th>Email</th><th>Contraseña</th><th>Favoritas</th><th>Estado</th><th></th></tr></thead><tbody>';
+    for(const c of clients){
+      const {count:favCount} = await sb.from('favorites').select('*',{count:'exact',head:true}).eq('client_id',c.id);
+      html += `<tr>
+        <td>${escHtml(c.name)}</td>
+        <td>${escHtml(c.email)}</td>
+        <td style="font-family:monospace;font-size:12px;color:var(--muted)">${escHtml(c.password_hash)}</td>
+        <td><span style="color:var(--gold)">${favCount||0}</span> fotos</td>
+        <td>${c.selection_done ? '<span style="color:var(--gold);font-size:11px">✓ Finalizado</span>' : '<span style="color:var(--muted);font-size:11px">Pendiente</span>'}</td>
+        <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar</button></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+  }
+
+  body.innerHTML = html;
+}
+
+// ── UPLOAD TO CLOUDINARY ──
+async function compressImage(file, maxPx=2000, quality=0.80){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      URL.revokeObjectURL(url);
+      let {width:w, height:h} = img;
+      if(w>maxPx||h>maxPx){
+        if(w>h){ h=Math.round(h*maxPx/w); w=maxPx; }
+        else{ w=Math.round(w*maxPx/h); h=maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>resolve(new File([blob],file.name,{type:'image/jpeg'})),'image/jpeg',quality);
+    };
+    img.src=url;
+  });
+}
+
+async function uploadToCloudinary(file){
+  const compressed = await compressImage(file);
+  const fd = new FormData();
+  fd.append('file', compressed);
+  fd.append('upload_preset', UPLOAD_PRESET);
+  fd.append('folder', `fotoselect/${currentSession.id}`);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {method:'POST',body:fd});
+  if(!res.ok) throw new Error('Error subiendo a Cloudinary');
+  const data = await res.json();
+  return {url: data.secure_url, filename: file.name};
+}
+
+async function handleFiles(files){
+  const arr = [...files].filter(f=>f.type.startsWith('image/'));
+  if(!arr.length) return;
+  const bar = document.getElementById('prog-bar');
+  const fill = document.getElementById('prog-fill');
+  bar.style.display='block';
+  let done=0;
+  for(const f of arr){
+    try{
+      const {url, filename} = await uploadToCloudinary(f);
+      await sbFrom('photos').insert({session_id:currentSession.id, url, filename});
+    }catch(e){ toast('Error subiendo '+f.name); }
+    done++;
+    fill.style.width=(done/arr.length*100)+'%';
+  }
+  setTimeout(()=>{ bar.style.display='none'; fill.style.width='0%'; },400);
+  toast(`${arr.length} foto${arr.length>1?'s':''} subida${arr.length>1?'s':''} ✓`);
+  renderSessionDetail();
+}
+
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('over');
+  handleFiles(e.dataTransfer.files);
+}
+
+async function deletePhoto(id, url){
+  if(!confirm('¿Eliminar esta foto?')) return;
+  await fetch(`${SURL}/rest/v1/photos?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`}
+  });
+  toast('Foto eliminada');
+  await renderSessionDetail();
+}
+
+// ── SESSIONS ──
+function openNewSessionModal(){ document.getElementById('session-name').value=''; document.getElementById('session-desc').value=''; hideErr('session-err'); document.getElementById('modal-session').classList.add('open'); }
+
+async function createSession(){
+  const name=document.getElementById('session-name').value.trim();
+  if(!name){ showErr('session-err','Escribe un nombre'); return; }
+  const {error} = await sb.from('sessions').insert({name, description:document.getElementById('session-desc').value.trim(), photographer_id:currentUser.id});
+  if(error){ showErr('session-err',error.message); return; }
+  closeModal('modal-session');
+  toast('Sesión creada ✓');
+  renderSessionsList();
+}
+
+// ── CLIENTS ──
+function openNewClientModal(){ document.getElementById('client-name').value=''; document.getElementById('client-email').value=''; document.getElementById('client-pass').value=''; hideErr('client-err'); document.getElementById('modal-client').classList.add('open'); }
+
+async function createClient(){
+  const name=document.getElementById('client-name').value.trim();
+  const email=document.getElementById('client-email').value.trim();
+  const pass=document.getElementById('client-pass').value.trim();
+  if(!name||!email||!pass){ showErr('client-err','Rellena todos los campos'); return; }
+  const {error} = await sb.from('clients').insert({name, email, password_hash:pass, session_id:currentSession.id, photographer_id:currentUser.id});
+  if(error){ showErr('client-err',error.message); return; }
+  closeModal('modal-client');
+  toast(`Acceso creado para ${name} ✓`);
+  renderSessionDetail();
+}
+
+async function deleteClient(id){
+  if(!confirm('¿Eliminar este cliente?')) return;
+  await sb.from('clients').delete().eq('id',id);
+  toast('Cliente eliminado');
+  renderSessionDetail();
+}
+
+// ══════════════════════════════════
+// CLIENT VIEW
+// ══════════════════════════════════
+async function loadClientView(){
+  showScreen('client');
+  document.getElementById('cl-user-badge').textContent = currentClientRow.name;
+  renderClientGallery();
+}
+
+async function renderClientGallery(){
+  const body = document.getElementById('cl-body');
+  body.innerHTML = '<div class="loading">Cargando tus fotos…</div>';
+
+  const [{data:photos},{data:favs},{data:session}] = await Promise.all([
+    sb.from('photos').select('*').eq('session_id',currentClientRow.session_id).order('created_at',{ascending:false}),
+    sb.from('favorites').select('photo_id').eq('client_id',currentClientRow.id),
+    sb.from('sessions').select('name,description').eq('id',currentClientRow.session_id).single()
+  ]);
+
+  const favSet = new Set((favs||[]).map(f=>f.photo_id));
+
+  let html = `
+    <div class="client-hero">
+      <h2>Hola, <em>${escHtml(currentClientRow.name)}</em></h2>
+      <p>${escHtml(session?.name||'')} ${session?.description ? '· '+escHtml(session.description) : ''}</p>
+    </div>
+    <div style="text-align:center;margin-bottom:24px">
+      <div class="fav-counter" id="fav-counter-box">❤ Has seleccionado <strong id="fav-count-num">${favSet.size}</strong> de ${(photos||[]).length} fotos</div>
+      ${currentClientRow.selection_done ? 
+        `<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada</div>` :
+        `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccion()" style="margin-top:16px;max-width:280px;margin-left:auto;margin-right:auto;display:block">Finalizar selección</button>`
+      }
+    </div>
+    <div class="client-grid">`;
+
+  for(const p of (photos||[])){
+    const isFav = favSet.has(p.id);
+    html += `<div class="client-photo ${isFav?'favorited':''}" id="cp-${p.id}">
+      <img src="${p.url}" alt="" loading="lazy" onclick="openClientLightbox('${p.id}')" style="cursor:zoom-in"/>
+      <div class="heart" onclick="toggleFav('${p.id}')" title="${isFav?'Quitar de favoritas':'Añadir a favoritas'}">${isFav?'❤':'🤍'}</div>
+    </div>`;
+  }
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+// Client lightbox
+let clientPhotos = [];
+let clientLbIndex = 0;
+
+function openClientLightbox(photoId){
+  const cards = document.querySelectorAll('.client-photo');
+  clientPhotos = [...cards].map(c=>({
+    id: c.id.replace('cp-',''),
+    url: c.querySelector('img').src
+  }));
+  clientLbIndex = clientPhotos.findIndex(p=>p.id===photoId);
+  showClientLb();
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function showClientLb(){
+  if(!clientPhotos.length) return;
+  clientLbIndex = ((clientLbIndex%clientPhotos.length)+clientPhotos.length)%clientPhotos.length;
+  document.getElementById('lb-img').src = clientPhotos[clientLbIndex].url;
+}
+
+document.getElementById('lb-prev').addEventListener('click',()=>{ clientLbIndex--; showClientLb(); });
+document.getElementById('lb-next').addEventListener('click',()=>{ clientLbIndex++; showClientLb(); });
+
+async function finalizarSeleccion(){
+  if(!confirm('¿Confirmas que has terminado de seleccionar tus fotos favoritas? El fotógrafo recibirá tu selección.')) return;
+  await fetch(`${SURL}/rest/v1/clients?id=eq.${currentClientRow.id}`, {
+    method: 'PATCH',
+    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation'},
+    body: JSON.stringify({selection_done: true, selection_done_at: new Date().toISOString()})
+  });
+  currentClientRow.selection_done = true;
+  const btn = document.getElementById('btn-finalizar');
+  if(btn) btn.outerHTML = '<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada — gracias</div>';
+  toast('¡Selección enviada al fotógrafo!');
+}
+
+async function toggleFav(photoId){
+  const favs = await sbFrom('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
+  const card = document.getElementById('cp-'+photoId);
+  const heart = card.querySelector('.heart');
+
+  if(favs.data&&favs.data.length>0){
+    await sbFrom('favorites').eq('id',favs.data[0].id).delete();
+    card.classList.remove('favorited');
+    heart.textContent='🤍';
+    toast('Eliminada de favoritas');
+  } else {
+    await sbFrom('favorites').insert({client_id:currentClientRow.id, photo_id:photoId});
+    card.classList.add('favorited');
+    heart.textContent='❤';
+    toast('¡Añadida a favoritas!');
+  }
+  // update counter
+  const newFavs = await sbFrom('favorites').select('photo_id').eq('client_id',currentClientRow.id);
+  const counter = document.getElementById('fav-count-num');
+  if(counter) counter.textContent = (newFavs.data||[]).length;
+}
+
+// ── LIGHTBOX ──
+function openLightbox(url){ document.getElementById('lb-img').src=url; document.getElementById('lightbox').classList.add('open'); }
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLightbox(); });
+
+// ── MODALS ──
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); }));
+
+// ── UTILS ──
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
 </body>
 </html>
