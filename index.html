@@ -356,8 +356,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
     </div>
   </header>
 
-  <div class="dash-body" id="ph-body">
-    </div>
+  <div class="dash-body" id="ph-body"></div>
 </div>
 
 <div id="screen-client" class="screen">
@@ -446,17 +445,34 @@ function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 // ── REGISTER (photographer only) ──
 async function handleRegister(){
   hideErr('reg-err');
+  const code=document.getElementById('reg-code').value.trim();
   const name=document.getElementById('reg-name').value.trim();
   const email=document.getElementById('reg-email').value.trim();
   const pass=document.getElementById('reg-pass').value;
-  if(!name||!email||!pass){ showErr('reg-err','Rellena todos los campos'); return; }
+  if(!code||!name||!email||!pass){ showErr('reg-err','Rellena todos los campos'); return; }
+  
   const btn=document.querySelector('#tab-register .btn-primary');
-  btn.disabled=true; btn.textContent='Creando cuenta…';
+  btn.disabled=true; btn.textContent='Verificando código…';
+  
+  // Validar código de invitación de forma pública
+  const {data:invite, error:invErr} = await sb.from('invite_codes').select('*').eq('code', code);
+  if(invErr || !invite || invite.length === 0 || invite[0].used){
+    btn.disabled=false; btn.textContent='Crear cuenta de fotógrafo';
+    showErr('reg-err','El código de invitación no es válido o ya ha sido utilizado.');
+    return;
+  }
+  
+  btn.textContent='Creando cuenta…';
   const {data,error} = await sb.auth.signUp({email,password:pass,options:{data:{name,role:'photographer'}}});
   btn.disabled=false; btn.textContent='Crear cuenta de fotógrafo';
   if(error){ showErr('reg-err',error.message); return; }
-  // update profile name
-  await sb.from('profiles').update({name}).eq('id',data.user.id);
+  
+  // Quemar código y actualizar perfil
+  await Promise.all([
+    sb.from('invite_codes').update({used: true}).eq('id', invite[0].id),
+    sb.from('profiles').update({name}).eq('id',data.user.id)
+  ]);
+  
   toast('¡Cuenta creada! Revisa tu email para confirmarla');
   switchTab('login');
 }
@@ -475,7 +491,7 @@ async function handleLogin(){
     btn.disabled=false; btn.textContent='Entrar';
     if(error){ showErr('login-err','Email o contraseña incorrectos'); return; }
     currentUser = data.user;
-    // Check if account is active
+    // Comprobar si la cuenta está activa
     const {data:profile} = await sbFrom('profiles').select('active').eq('id',currentUser.id).single();
     if(profile && profile.active === false){ 
       await sb.auth.signOut();
@@ -486,11 +502,10 @@ async function handleLogin(){
     console.log('Login OK, user id:', currentUser.id, 'admin?', currentUser.id===ADMIN_ID);
     await loadPhotographerDashboard();
   } else {
-    // client login: check clients table
+    // login del cliente
     const {data:clients,error} = await sb.from('clients').select('*').eq('email',email);
     btn.disabled=false; btn.textContent='Entrar';
     if(error||!clients||clients.length===0){ showErr('login-err','Cliente no encontrado'); return; }
-    // simple password check
     const client = clients.find(c=>c.password_hash===pass);
     if(!client){ showErr('login-err','Contraseña incorrecta'); return; }
     currentClientRow = client;
@@ -549,7 +564,7 @@ async function renderAdminPanel(){
       <div class="admin-card">
         <h3>Códigos de invitación</h3>
         <div style="display:flex;gap:8px;margin-bottom:16px">
-          <input type="text" id="new-code-email" class="search-input" placeholder="Email del fotógrafo (opcional)" style="flex:1"/>
+          <input type="text" id="new-code-email" class="search-input" placeholder="Email del fotógrafo (opcional)" style="flex:1; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px; outline:none; font-family:inherit; font-size:13px;"/>
           <button class="btn-gold" onclick="generateCode()">+ Generar</button>
         </div>
         ${codesHtml||'<p style="color:var(--muted);font-size:12px">No hay códigos aún</p>'}
@@ -580,26 +595,23 @@ async function deleteCode(id){
   if(!confirm('¿Eliminar este código?')) return;
   await sbFrom('invite_codes').eq('id',id).delete();
   toast('Código eliminado');
-  await new Promise(r=>setTimeout(r,800));
-  showScreen('admin');
-  await renderAdminPanel();
+  await new Promise(r=>setTimeout(r,400));
+  renderAdminPanel();
 }
 
 async function deletePhotographer(id){
   if(!confirm('¿Desactivar este fotógrafo? No podrá entrar en la app.')) return;
   await sbFrom('profiles').eq('id',id).update({active: false});
   toast('Fotógrafo desactivado ✓');
-  await new Promise(r=>setTimeout(r,800));
-  showScreen('admin');
-  await renderAdminPanel();
+  await new Promise(r=>setTimeout(r,400));
+  renderAdminPanel();
 }
 
 async function activatePhotographer(id){
   await sbFrom('profiles').eq('id',id).update({active: true});
   toast('Fotógrafo activado ✓');
-  await new Promise(r=>setTimeout(r,800));
-  showScreen('admin');
-  await renderAdminPanel();
+  await new Promise(r=>setTimeout(r,400));
+  renderAdminPanel();
 }
 
 // ── CHECK SESSION ON LOAD ──
@@ -640,7 +652,12 @@ async function loadPhotographerDashboard(){
 async function renderSessionsList(){
   const body = document.getElementById('ph-body');
   body.innerHTML = '<div class="loading">Cargando sesiones…</div>';
-  const {data:sessions} = await sb.from('sessions').select('*').eq('photographer_id',currentUser.id).order('created_at',{ascending:false});
+
+  // 1 SOLA PETICIÓN OPTIMIZADA: Cuenta fotos y clientes embebidos en el servidor
+  const {data:sessions, error} = await sb.from('sessions')
+    .select('*, photos(id), clients(id)')
+    .eq('photographer_id',currentUser.id)
+    .order('created_at',{ascending:false});
 
   const isAdmin = currentUser && currentUser.id.trim()===ADMIN_ID.trim();
   let html = `
@@ -657,15 +674,15 @@ async function renderSessionsList(){
   } else {
     html += '<div class="sessions-grid">';
     for(const s of sessions){
-      const {count:photoCount} = await sb.from('photos').select('*',{count:'exact',head:true}).eq('session_id',s.id);
-      const {count:clientCount} = await sb.from('clients').select('*',{count:'exact',head:true}).eq('session_id',s.id);
+      const photoCount = s.photos ? s.photos.length : 0;
+      const clientCount = s.clients ? s.clients.length : 0;
       html += `
         <div class="session-card" onclick="openSession('${s.id}','${escHtml(s.name)}')">
           <h3>${escHtml(s.name)}</h3>
           <p>${escHtml(s.description||'Sin descripción')}</p>
           <div class="session-meta">
-            <div><span>${photoCount||0}</span> fotos</div>
-            <div><span>${clientCount||0}</span> clientes</div>
+            <div><span>${photoCount}</span> fotos</div>
+            <div><span>${clientCount}</span> clientes</div>
             <div style="margin-left:auto"><button class="btn-sm danger" onclick="event.stopPropagation();deleteSession('${s.id}','${escHtml(s.name)}')" style="font-size:10px;padding:4px 10px">Eliminar</button></div>
           </div>
         </div>`;
@@ -677,11 +694,14 @@ async function renderSessionsList(){
 
 async function deleteSession(id, name){
   if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
-  await sbFrom('favorites').in('client_id', (await sbFrom('clients').select('id').eq('session_id',id)).data?.map(c=>c.id)||[]);
+  const {data:cls} = await sbFrom('clients').select('id').eq('session_id',id);
+  if(cls && cls.length > 0){
+     await sbFrom('favorites').in('client_id', cls.map(c=>c.id));
+  }
   await sbFrom('clients').eq('session_id',id).delete();
   await sbFrom('photos').eq('session_id',id).delete();
   await sbFrom('sessions').eq('id',id).delete();
-  await new Promise(r=>setTimeout(r,500));
+  await new Promise(r=>setTimeout(r,400));
   toast('Sesión eliminada ✓');
   renderSessionsList();
 }
@@ -735,10 +755,16 @@ async function renderSessionDetail(){
     sb.from('clients').select('*').eq('session_id',currentSession.id)
   ]);
 
-  // Get favorites per photo
-  const {data:favs} = await sb.from('favorites').select('photo_id, client_id, clients(name)').in('photo_id',(photos||[]).map(p=>p.id));
-  const favMap = {};
-  (favs||[]).forEach(f=>{ if(!favMap[f.photo_id]) favMap[f.photo_id]=[]; favMap[f.photo_id].push(f.clients?.name||'cliente'); });
+  const photoIds = (photos||[]).map(p=>p.id);
+  let favMap = {};
+  
+  if(photoIds.length > 0){
+    const {data:favs} = await sb.from('favorites').select('photo_id, client_id, clients(name)').in('photo_id', photoIds);
+    (favs||[]).forEach(f=>{ 
+      if(!favMap[f.photo_id]) favMap[f.photo_id]=[]; 
+      if(f.clients) favMap[f.photo_id].push(f.clients.name);
+    });
+  }
 
   let html = `
     <div class="back-btn" onclick="renderSessionsList()">← Volver a sesiones</div>
@@ -764,7 +790,7 @@ async function renderSessionDetail(){
       const favNames = favMap[p.id];
       html += `<div class="photo-item">
         <img src="${p.url}" alt="${escHtml(p.filename||'')}" onclick="openLightboxOnly('${p.url}')" loading="lazy"/>
-        ${favNames ? `<div class="fav-badge">❤ ${favNames.join(', ')}</div>` : ''}
+        ${favNames && favNames.length > 0 ? `<div class="fav-badge">❤ ${escHtml(favNames.join(', '))}</div>` : ''}
         <button class="del-btn" onclick="deletePhoto('${p.id}','${p.url}')">×</button>
       </div>`;
     }
@@ -1026,9 +1052,11 @@ function openLightboxOnly(url){
   document.getElementById('lightbox').classList.add('open'); 
 }
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+
+// Navegación por teclado corregida y fluida
 document.addEventListener('keydown',e=>{ 
   if(e.key==='Escape') closeLightbox(); 
-  if(document.getElementById('lightbox').classList.contains('open') && document.getElementById('lb-prev').style.display !== 'none') {
+  if(document.getElementById('lightbox').classList.contains('open') && clientPhotos.length > 0) {
     if(e.key==='ArrowLeft') { clientLbIndex--; showClientLb(); }
     if(e.key==='ArrowRight') { clientLbIndex++; showClientLb(); }
   }
