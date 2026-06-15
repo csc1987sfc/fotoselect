@@ -296,7 +296,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 
 <div id="screen-admin" class="screen">
   <header class="app-header">
-    <div class="app-logo">Foto<span>Select</span> <span style="font-size:10px;color:var(--accent)">Admin</span></div>
+    <div class="app-logo">Foto<span>Select</span></div>
     <div class="header-right"><button class="btn-sm danger" onclick="logout()">Salir</button></div>
   </header>
   <div class="dash-body" id="admin-body"></div>
@@ -398,7 +398,7 @@ async function renderAdminPanel(){
         <div style="font-size:11px;color:var(--muted)">${escHtml(p.email)}</div>
       </div>
       <div>
-        <button class="btn-sm danger" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar</button>
+        <button class="btn-sm danger" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar por completo</button>
       </div>
     </div>`;
   });
@@ -416,7 +416,7 @@ async function renderAdminPanel(){
 }
 
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Estás SEGURO? Se eliminará el fotógrafo por completo con todas sus galerías.")) return;
+  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo y todas sus galerías automáticamente.")) return;
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
   if(error) { toast('Error al eliminar fotógrafo'); return; }
   toast('Fotógrafo eliminado con éxito ✓');
@@ -555,7 +555,7 @@ async function renderClientGallery(){
       <div class="fav-counter">❤ Tienes <strong>${favSet.size}</strong> seleccionadas</div>
       ${terminado ? 
         `<div style="color:var(--gold); font-size:14px; font-weight:500; margin-top:20px; border: 1px dashed var(--border); padding:15px; display:inline-block">✓ Has finalizado la selección. Tu fotógrafo ha sido notificado y la galería se ha limpiado.</div>` :
-        `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccionCliente()" style="max-width:280px; margin:24px auto 0 auto; display:block;">Finalizar y Guardar Selección</button>`
+        `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccionCliente()">Finalizar y Guardar Selección</button>`
       }
     </div><div class="client-grid">`;
 
@@ -574,7 +574,7 @@ async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía con un corazón antes de poder finalizar."); return; }
-  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán de la galería permanentemente en este instante. ¿Confirmas?`)) return;
+  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán de la galería permanentemente. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
   if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección…'; }
