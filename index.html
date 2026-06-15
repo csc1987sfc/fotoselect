@@ -6,7 +6,7 @@
 <title>FotoSelect — Galería Profesional</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet"/>
 <script>
-// Direct Supabase REST client
+// Cliente directo REST para Supabase
 const SURL = 'https://urpjnmbhhbzeirktpzcv.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVycGpubWJoaGJ6ZWlya3RwemN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDU3NDQsImV4cCI6MjA5NTIyMTc0NH0.-DFxwerywoeoiOPzErn2PVCCosTKjuUMIVBBdXQ_RNE';
 
@@ -42,7 +42,7 @@ async function _restWrite(method, table, body, filters=''){
   }catch(e){return {data:null,error:{message:e.message}};}
 }
 
-// Auth
+// Autenticación
 const sbAuth = {
   async signUp({email,password,options:{data:meta}={}}){
     try{
@@ -69,7 +69,7 @@ const sbAuth = {
   onAuthStateChange(cb){ _authListeners.push(cb); _loadSession(); if(_session) setTimeout(()=>cb('INITIAL_SESSION',_session),0); return {data:{subscription:{unsubscribe:()=>{ _authListeners=_authListeners.filter(l=>l!==cb); }}}}; }
 };
 
-// Query builder
+// Constructor de consultas (Query Builder)
 function sbFrom(table){
   const s={table,filters:[],cols:'*',orderCol:null,orderAsc:true,lim:null,isSingle:false,isHead:false,countMode:null};
   const qs=()=>{
@@ -130,14 +130,14 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .screen{display:none;min-height:100vh}
 .screen.active{display:flex;flex-direction:column}
 
-/* AUTH SCREEN */
+/* PANTALLA DE AUTH */
 #screen-auth{align-items:center;justify-content:center;padding:40px 20px;position:relative;overflow:hidden}
 #screen-auth::before{
   content:'';position:absolute;inset:0;
   background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(201,169,110,.08),transparent 70%);
   pointer-events:none;
 }
-.auth-box{width:100%;max-width:420px;animation:riseIn .7s ease both}
+.auth-box{width:100%;max-width:420px;}
 .auth-logo{text-align:center;margin-bottom:48px}
 .auth-logo h1{font-family:'Playfair Display',serif;font-size:2.4rem;font-weight:400;letter-spacing:0.02em}
 .auth-logo h1 span{color:var(--gold);font-style:italic}
@@ -165,7 +165,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);border-radius:var(--r);padding:10px 14px;font-size:12px;color:#e07060;margin-bottom:16px;display:none}
 .err.show{display:block}
 
-/* SHARED HEADER */
+/* CABECERA */
 .app-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:16px 32px;
@@ -181,17 +181,19 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .btn-sm:hover{border-color:var(--gold);color:var(--gold)}
 .btn-sm.danger:hover{border-color:var(--accent);color:var(--accent)}
 
-/* DASHBOARD */
+/* PANEL DE CONTROL */
 .dash-body{max-width:1100px;margin:0 auto;padding:40px 24px}
 .dash-title{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;margin-bottom:8px}
 .dash-title em{font-style:italic;color:var(--gold)}
 .dash-sub{font-size:12px;color:var(--muted);letter-spacing:0.06em;margin-bottom:40px}
 
 .sessions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:48px}
-.session-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;cursor:pointer;transition:border-color .2s,transform .2s}
+.session-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;position:relative;cursor:pointer;transition:border-color .2s,transform .2s}
 .session-card:hover{border-color:var(--gold);transform:translateY(-2px)}
-.session-card h3{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:400;margin-bottom:6px}
+.session-card h3{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:400;margin-bottom:6px;padding-right:24px}
 .session-card p{font-size:11px;color:var(--muted);letter-spacing:0.04em;margin-bottom:14px}
+.session-card .card-del{position:absolute;top:16px;right:16px;color:var(--muted);font-size:14px;cursor:pointer;z-index:10;transition:color .2s;}
+.session-card .card-del:hover{color:var(--accent)}
 
 .back-btn{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:28px;letter-spacing:0.06em}
 .back-btn:hover{color:var(--gold)}
@@ -207,11 +209,11 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .photo-item:hover .del-btn{opacity:1}
 .photo-item .del-btn:hover{background:var(--accent)}
 
-.clients-table{width:100%;border-collapse:collapse;margin-bottom:16px;margin-top:16px}
+.clients-table{width:100%;border-collapse:collapse;margin-bottom:24px;margin-top:16px}
 .clients-table th{text-align:left;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border)}
 .clients-table td{padding:12px;border-bottom:1px solid var(--border);font-size:13px}
 
-/* CLIENT VIEW */
+/* VISTA DEL CLIENTE */
 .client-hero{text-align:center;margin-bottom:48px}
 .client-hero h2{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;margin-bottom:8px}
 .client-hero h2 em{font-style:italic;color:var(--gold)}
@@ -224,14 +226,14 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .client-photo.favorited{border-color:var(--gold)}
 .heart{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:50%;background:rgba(15,14,12,.65);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer}
 
-/* MODAL */
+/* MODALES */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
 .modal-bg.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:100%;max-width:460px;position:relative}
 .modal h3{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:400;margin-bottom:24px}
 .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
 
-/* ADMIN PANEL */
+/* PANEL ADMIN GLOBAL */
 .admin-grid{display:grid;grid-template-columns:1fr;gap:32px;margin-top:32px}
 .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .ph-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
@@ -359,7 +361,6 @@ async function handleLogin(){
     currentUser = data.user;
     loadPhotographerDashboard();
   } else {
-    // Buscar en la tabla 'clients' usando las columnas reales inglesas de tu esquema
     const {data:clients,error} = await sb.from('clients').select('*').eq('email',email);
     if(error||!clients||clients.length===0){ showErr('login-err','Cliente no encontrado'); return; }
     const client = clients.find(c=>c.password_hash===pass);
@@ -392,7 +393,7 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// ADMIN PANEL REAL (Basado estrictamente en tu esquema)
+// ADMIN PANEL GLOBAL
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando fotógrafos…</div>';
@@ -406,7 +407,7 @@ async function renderAdminPanel(){
         <div style="font-size:11px;color:var(--muted)">${escHtml(p.email)}</div>
       </div>
       <div>
-        <button class="btn-sm danger" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar por completo</button>
+        <button class="btn-sm danger" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar</button>
       </div>
     </div>`;
   });
@@ -423,39 +424,15 @@ async function renderAdminPanel(){
     </div>`;
 }
 
-// BORRADO TOTAL REAL EN CASCADA MANUAL (Evita fallos de foreign keys)
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará de forma irreversible todas las sesiones, fotos, clientes y favoritos de este fotógrafo.")) return;
-  
-  // 1. Obtener todas las sesiones de este fotógrafo
-  const {data: sesiones} = await sb.from('sessions').select('id').eq('photographer_id', idFotografo);
-  const sesionIds = (sesiones||[]).map(s => s.id);
-
-  if(sesionIds.length > 0) {
-    // 2. Buscar todos los clientes asociados a esas sesiones
-    const {data: clientes} = await sb.from('clients').select('id').in('session_id', sesionIds);
-    const clientIds = (clientes||[]).map(c => c.id);
-
-    if(clientIds.length > 0) {
-      // 3. Borrar los favoritos de esos clientes
-      await sb.from('favorites').in('client_id', clientIds).delete();
-    }
-    
-    // 4. Borrar fotos y los clientes de las sesiones
-    await sb.from('photos').in('session_id', sesionIds).delete();
-    await sb.from('clients').in('session_id', sesionIds).delete();
-    // 5. Borrar las sesiones
-    await sb.from('sessions').in('id', sesionIds).delete();
-  }
-
-  // 6. Eliminar el perfil del fotógrafo
-  await sb.from('profiles').eq('id', idFotografo).delete();
-  
+  if(!confirm("⚠️ ¿Estás SEGURO? Se eliminará de forma irreversible el fotógrafo, sus sesiones, fotos, clientes y favoritos.")) return;
+  const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
+  if(error) { toast('Error al eliminar fotógrafo'); return; }
   toast('Fotógrafo eliminado con éxito ✓');
   renderAdminPanel();
 }
 
-// PHOTOGRAPHER
+// PANEL FOTÓGRAFO
 async function loadPhotographerDashboard(){
   showScreen('photographer');
   const {data:profile} = await sb.from('profiles').select('name').eq('id',currentUser.id).single();
@@ -471,6 +448,7 @@ async function renderSessionsList(){
   let html = `<h2 class="dash-title">Tu <em>estudio</em></h2><p class="dash-sub">Gestiona sesiones</p><div class="sessions-grid">`;
   (sessions||[]).forEach(s=>{
     html += `<div class="session-card" onclick="openSession('${s.id}','${escHtml(s.name)}')">
+      <div class="card-del" onclick="event.stopPropagation(); deleteSession('${s.id}','${escHtml(s.name)}')">🗑️</div>
       <h3>${escHtml(s.name)}</h3>
       <p>${escHtml(s.description||'Sin descripción')}</p>
     </div>`;
@@ -511,7 +489,7 @@ async function renderSessionDetail(){
       <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar cliente</button></td>
     </tr>`;
   });
-  html += `</tbody></table><button class="btn-gold" onclick="openNewClientModal()">+ Añadir nuevo cliente</button>`;
+  html += `</tbody></table><button class="btn-primary" style="max-width:220px;" onclick="openNewClientModal()">+ Añadir nuevo cliente</button>`;
   body.innerHTML = html;
 }
 
@@ -529,10 +507,19 @@ async function handleFiles(files){
   renderSessionDetail();
 }
 
+async function deleteSession(id, name){
+  if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
+  const { error } = await sb.from('sessions').delete().eq('id', id);
+  if(error) { toast('Error al borrar sesión'); return; }
+  toast('Sesión eliminada ✓');
+  renderSessionsList();
+}
+
 async function deletePhoto(id){ await sb.from('photos').delete().eq('id',id); renderSessionDetail(); }
+async function deleteClient(id){ if(!confirm("¿Eliminar este cliente?")) return; await sb.from('clients').delete().eq('id',id); renderSessionDetail(); }
 function openNewSessionModal(){ document.getElementById('modal-session').classList.add('open'); }
 function openNewClientModal(){ document.getElementById('modal-client').classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('remove'); document.getElementById(id).classList.remove('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 async function createSession(){
   const name=document.getElementById('session-name').value.trim();
@@ -548,33 +535,17 @@ async function createClient(){
   const email=document.getElementById('client-email').value.trim();
   const pass=document.getElementById('client-pass').value.trim();
   if(!name||!email||!pass) return;
-  
-  await sb.from('clients').insert({
-    photographer_id: currentUser.id,
-    session_id: currentSession.id,
-    name, 
-    email, 
-    password_hash: pass, 
-    selection_done: false
-  });
+  await sb.from('clients').insert({photographer_id: currentUser.id, session_id: currentSession.id, name, email, password_hash: pass, selection_done: false});
   closeModal('modal-client');
   renderSessionDetail();
 }
 
-async function deleteClient(id){ 
-  if(!confirm("¿Eliminar este cliente? Se borrarán sus favoritos de la base de datos.")) return;
-  await sb.from('favorites').delete().eq('client_id',id);
-  await sb.from('clients').delete().eq('id',id); 
-  renderSessionDetail(); 
-}
-
-// CLIENT VIEW 
+// VISTA CLIENTE
 async function loadClientView(){ showScreen('client'); renderClientGallery(); }
 
 async function renderClientGallery(){
   const body = document.getElementById('cl-body');
   body.innerHTML = '<div class="loading">Cargando tus fotografías…</div>';
-
   const {data:clRefresh} = await sb.from('clients').select('*').eq('id',currentClientRow.id).single();
   if(clRefresh) currentClientRow = clRefresh;
 
@@ -585,7 +556,6 @@ async function renderClientGallery(){
 
   const favSet = new Set((favs||[]).map(f=>f.photo_id));
   const terminado = currentClientRow.selection_done;
-
   document.getElementById('cl-user-badge').textContent = currentClientRow.name;
 
   let html = `
@@ -609,28 +579,18 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
-// ACCIÓN DE FINALIZACIÓN REESCRITA SINTAXIS REST COMPATIBLE
 async function finalizarSeleccionCliente(){
-  // 1. Conseguir qué favoritos tiene marcados el cliente
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
-
-  if(!idsFavoritos || idsFavoritos.length === 0){
-    alert("Debes marcar al menos una fotografía con un corazón antes de poder finalizar la sesión.");
-    return;
-  }
-
-  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto de fotos descartadas de la sesión se borrarán permanentemente y no podrás cambiar la selección. ¿Confirmas?`)) return;
+  if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía con un corazón antes de poder finalizar."); return; }
+  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán permanentemente. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
   if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección…'; }
 
-  // 2. Eliminar fotos de la sesión que NO pertenezcan al grupo de IDs favoritos mediante filtro notIn directo
   await sb.from('photos').eq('session_id', currentClientRow.session_id).notIn('id', idsFavoritos).delete();
-
-  // 3. Actualizar la columna 'selection_done' a true
   await sb.from('clients').update({ selection_done: true, selection_done_at: new Date().toISOString() }).eq('id', currentClientRow.id);
-
+  
   currentClientRow.selection_done = true;
   toast('¡Selección guardada con éxito!');
   renderClientGallery();
@@ -638,11 +598,8 @@ async function finalizarSeleccionCliente(){
 
 async function toggleFav(photoId){
   const {data:favs} = await sb.from('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
-  if(favs && favs.length > 0){
-    await sb.from('favorites').eq('id',favs[0].id).delete();
-  } else {
-    await sb.from('favorites').insert({client_id:currentClientRow.id, photo_id:photoId});
-  }
+  if(favs && favs.length > 0){ await sb.from('favorites').eq('id',favs[0].id).delete(); } 
+  else { await sb.from('favorites').insert({client_id:currentClientRow.id, photo_id:photoId}); }
   renderClientGallery();
 }
 
@@ -650,7 +607,6 @@ async function toggleFav(photoId){
   const {data:{session}} = await sb.auth.getSession();
   if(session){ currentUser=session.user; loadPhotographerDashboard(); } else { showScreen('auth'); }
 })();
-
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 </body>
