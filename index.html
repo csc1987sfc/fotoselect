@@ -428,6 +428,7 @@ async function renderAdminPanel(){
     
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:32px; margin-top:24px;">
       
+      <!-- COLUMNA IZQUIERDA: CREACIÓN DIRECTA DE FOTÓGRAFOS -->
       <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
         <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px; color:var(--gold);">➕ Dar de Alta Fotógrafo</h3>
         <div class="err" id="admin-reg-err" style="margin-bottom:16px;"></div>
@@ -437,6 +438,7 @@ async function renderAdminPanel(){
         <button class="btn-primary" style="margin-top:12px;" onclick="crearFotografoDesdeAdmin()">Crear Cuenta Comercial</button>
       </div>
 
+      <!-- COLUMNA DERECHA: LISTADO Y CONTROL ACCIONES -->
       <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
         <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px;">📸 Clientes Registrados en el SaaS</h3>
         <div style="max-height:450px; overflow-y:auto; padding-right:6px;">
@@ -508,6 +510,15 @@ async function borrarFotografoTotal(idFotografo){
 // PANEL FOTÓGRAFO INDIVIDUAL
 async function loadPhotographerDashboard(){
   showScreen('photographer');
+  
+  // CORREGIDO: FILTRO DE SEGURIDAD EXCLUSIVO PARA EL ADMINISTRADOR SUPREMO
+  const adminBtn = document.getElementById('admin-btn');
+  if (currentUser && currentUser.email === 'csc87sfc@gmail.com') {
+    adminBtn.style.display = ''; // Si eres tú, se muestra el botón dorado
+  } else {
+    adminBtn.style.display = 'none'; // Si es cualquier otro fotógrafo, se oculta por completo
+  }
+
   const {data:profile} = await sb.from('profiles').select('username').eq('id',currentUser.id).single();
   document.getElementById('ph-user-badge').textContent = profile?.username || currentUser.email;
   renderSessionsList();
