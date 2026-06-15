@@ -548,11 +548,14 @@ async function renderAdminPanel(){
         <div style="font-weight:500">${escHtml(p.name||'Sin nombre')} ${!isActive?'<span style="color:var(--accent);font-size:10px;letter-spacing:0.1em">DESACTIVADO</span>':''}</div>
         <div style="font-size:11px;color:var(--muted)">${escHtml(p.email||'')}</div>
       </div>
-      <div style="font-size:11px;color:var(--muted)">${new Date(p.created_at).toLocaleDateString('es-ES')}</div>
-      ${isActive 
-        ? `<button class="btn-sm danger" onclick="deletePhotographer('${p.id}')">Desactivar</button>`
-        : `<button class="btn-gold" style="font-size:10px;padding:5px 12px" onclick="activatePhotographer('${p.id}')">Activar</button>`
-      }
+      <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px">
+        <span>${new Date(p.created_at).toLocaleDateString('es-ES')}</span>
+        ${isActive 
+          ? `<button class="btn-sm danger" onclick="deletePhotographer('${p.id}')">Desactivar</button>`
+          : `<button class="btn-gold" style="font-size:10px;padding:5px 12px" onclick="activatePhotographer('${p.id}')">Activar</button>`
+        }
+        <button class="btn-sm danger" style="padding:6px 10px;font-size:13px" onclick="eliminarFotografoPorCompleto('${p.id}','${escHtml(p.email||'')}')" title="Borrar permanentemente">🗑️</button>
+      </div>
     </div>`;
   });
 
@@ -614,6 +617,32 @@ async function activatePhotographer(id){
   renderAdminPanel();
 }
 
+// BORRADO FULMINANTE DESDE PANEL ADMIN
+async function eliminarFotografoPorCompleto(id, email) {
+  if(!confirm(`⚠️ ¿ESTÁS SEGURO? \nEsto eliminará permanentemente al fotógrafo (${email}) junto con todas sus sesiones, clientes y fotos de la base de datos AL INSTANTE.`)) return;
+  const reconfirmar = prompt(`Para confirmar el borrado definitivo, escribe la palabra "ELIMINAR":`);
+  if (reconfirmar !== "ELIMINAR") { alert("Confirmación incorrecta. Acción cancelada."); return; }
+  
+  // 1. Conseguir todas las sesiones de este fotógrafo para borrar favoritos en cascada manual
+  const {data: sses} = await sbFrom('sessions').select('id').eq('photographer_id', id);
+  if(sses && sses.length > 0){
+    const sIds = sses.map(s => s.id);
+    const {data: cls} = await sbFrom('clients').select('id').in('session_id', sIds);
+    if(cls && cls.length > 0){
+       await sbFrom('favorites').in('client_id', cls.map(c => c.id));
+    }
+    await sbFrom('clients').in('session_id', sIds).delete();
+    await sbFrom('photos').in('session_id', sIds).delete();
+    await sbFrom('sessions').in('session_id', sIds).delete();
+  }
+  
+  // 2. Eliminar el perfil definitivo
+  await sbFrom('profiles').eq('id', id).delete();
+  toast('Fotógrafo eliminado por completo ✓');
+  await new Promise(r=>setTimeout(r,400));
+  renderAdminPanel();
+}
+
 // ── CHECK SESSION ON LOAD ──
 (async()=>{
   const {data:{session}} = await sb.auth.getSession();
@@ -653,7 +682,6 @@ async function renderSessionsList(){
   const body = document.getElementById('ph-body');
   body.innerHTML = '<div class="loading">Cargando sesiones…</div>';
 
-  // 1 SOLA PETICIÓN OPTIMIZADA: Cuenta fotos y clientes embebidos en el servidor
   const {data:sessions, error} = await sb.from('sessions')
     .select('*, photos(id), clients(id)')
     .eq('photographer_id',currentUser.id)
@@ -1010,17 +1038,44 @@ function showClientLb(){
 document.getElementById('lb-prev').addEventListener('click',(e)=>{ e.stopPropagation(); clientLbIndex--; showClientLb(); });
 document.getElementById('lb-next').addEventListener('click',(e)=>{ e.stopPropagation(); clientLbIndex++; showClientLb(); });
 
+// CLIENTE FINALIZA SELECCIÓN Y SE LIMPIA EL ESPACIO SOBRANTE AL INSTANTE
 async function finalizarSeleccion(){
-  if(!confirm('¿Confirmas que has terminado de seleccionar tus fotos favoritas? El fotógrafo recibirá tu selección.')) return;
-  await fetch(`${SURL}/rest/v1/clients?id=eq.${currentClientRow.id}`, {
-    method: 'PATCH',
-    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation'},
-    body: JSON.stringify({selection_done: true, selection_done_at: new Date().toISOString()})
-  });
-  currentClientRow.selection_done = true;
+  const seguro = confirm("¿Estás completamente seguro de finalizar? Las fotos NO seleccionadas se eliminarán permanentemente de la galería en este mismo instante para procesar tu pedido.");
+  if (!seguro) return;
+
   const btn = document.getElementById('btn-finalizar');
-  if(btn) btn.outerHTML = '<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada — gracias</div>';
-  toast('¡Selección enviada al fotógrafo!');
+  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección y limpiando galería…'; }
+
+  try {
+    // 1. Conseguir fotos marcadas como favoritas por este cliente
+    const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
+    const idsElegidos = (favs||[]).map(f => f.photo_id);
+
+    if (idsElegidos.length === 0) {
+      alert("Debes seleccionar al menos una foto favorita antes de poder dar por finalizada la selección.");
+      if(btn) { btn.disabled = false; btn.textContent = 'Finalizar selección'; }
+      return;
+    }
+
+    // 2. Borrar de la tabla 'photos' las que NO estén en la lista de elegidas para esta sesión concreta
+    await sb.from('photos').delete().eq('session_id', currentClientRow.session_id).not('id', 'in', `(${idsElegidos.join(',')})`);
+
+    // 3. Marcar cliente como finalizado
+    await fetch(`${SURL}/rest/v1/clients?id=eq.${currentClientRow.id}`, {
+      method: 'PATCH',
+      headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({selection_done: true, selection_done_at: new Date().toISOString()})
+    });
+
+    currentClientRow.selection_done = true;
+    toast('¡Selección procesada y espacio liberado con éxito!');
+    renderClientGallery();
+
+  } catch (e) {
+    console.error(e);
+    alert("Hubo un contratiempo al procesar tu selección. Por favor, inténtalo de nuevo.");
+    if(btn) { btn.disabled = false; btn.textContent = 'Finalizar selección'; }
+  }
 }
 
 async function toggleFav(photoId){
@@ -1052,11 +1107,9 @@ function openLightboxOnly(url){
   document.getElementById('lightbox').classList.add('open'); 
 }
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
-
-// Navegación por teclado corregida y fluida
 document.addEventListener('keydown',e=>{ 
   if(e.key==='Escape') closeLightbox(); 
-  if(document.getElementById('lightbox').classList.contains('open') && clientPhotos.length > 0) {
+  if(document.getElementById('lightbox').classList.contains('open') && document.getElementById('lb-prev').style.display !== 'none') {
     if(e.key==='ArrowLeft') { clientLbIndex--; showClientLb(); }
     if(e.key==='ArrowRight') { clientLbIndex++; showClientLb(); }
   }
