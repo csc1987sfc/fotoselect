@@ -74,7 +74,6 @@ function sbFrom(table){
     s.filters.forEach(f=>{ 
       if(f.t==='eq') q+=`&${f.col}=eq.${encodeURIComponent(f.v)}`; 
       else if(f.t==='in') q+=`&${f.col}=in.(${f.vs.map(v=>encodeURIComponent(v)).join(',')})`;
-      else if(f.t==='notIn') q+=`&${f.col}=not.in.(${f.vs.map(v=>encodeURIComponent(v)).join(',')})`;
     });
     if(s.orderCol) q+=`&order=${s.orderCol}.${s.orderAsc?'asc':'desc'}`;
     if(s.lim) q+=`&limit=${s.lim}`;
@@ -85,7 +84,6 @@ function sbFrom(table){
     s.filters.forEach(f=>{ 
       if(f.t==='eq') parts.push(`${f.col}=eq.${encodeURIComponent(f.v)}`); 
       else if(f.t==='in') parts.push(`${f.col}=in.(${f.vs.map(v=>encodeURIComponent(v)).join(',')})`);
-      else if(f.t==='notIn') parts.push(`${f.col}=not.in.(${f.vs.map(v=>encodeURIComponent(v)).join(',')})`);
     }); 
     return parts.join('&'); 
   };
@@ -93,7 +91,6 @@ function sbFrom(table){
     select(cols='*',opts={}){ s.cols=cols; if(opts.count) s.countMode=opts.count; if(opts.head) s.isHead=opts.head; return b; },
     eq(col,v){ s.filters.push({t:'eq',col,v}); return b; },
     in(col,vs){ s.filters.push({t:'in',col,vs}); return b; },
-    notIn(col,vs){ s.filters.push({t:'notIn',col,vs}); return b; },
     order(col,opts={}){ s.orderCol=col; s.orderAsc=opts.ascending!==false; return b; },
     limit(n){ s.lim=n; return b; },
     single(){ s.isSingle=true; return b; },
@@ -206,6 +203,8 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .clients-table{width:100%;border-collapse:collapse;margin-bottom:24px;margin-top:16px}
 .clients-table th{text-align:left;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border)}
 .clients-table td{padding:12px;border-bottom:1px solid var(--border);font-size:13px}
+.btn-eye { background:none; border:none; color:var(--muted); cursor:pointer; margin-left:6px; font-size:14px; vertical-align:middle; }
+.btn-eye:hover { color:var(--gold); }
 
 .client-hero{text-align:center;margin-bottom:48px}
 .client-hero h2{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;margin-bottom:8px}
@@ -296,8 +295,8 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 
 <div id="screen-admin" class="screen">
   <header class="app-header">
-    <div class="app-logo">Foto<span>Select</span></div>
-    <div class="header-right"><button class="btn-sm danger" onclick="logout()">Salir</button></div>
+    <div class="app-logo">Foto<span>Select</span> <span style="font-size:10px;color:var(--gold)">Admin</span></div>
+    <div class="header-right"><button class="btn-sm" onclick="showScreen('photographer')">← Volver</button></div>
   </header>
   <div class="dash-body" id="admin-body"></div>
 </div>
@@ -384,42 +383,42 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// ADMIN PANEL GLOBAL
+// ADMIN PANEL GLOBAL (¡Papelera de reciclaje arreglada!)
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
-  body.innerHTML = '<div class="loading">Cargando fotógrafos…</div>';
+  body.innerHTML = '<div class="loading">Cargando lista de fotógrafos…</div>';
   const {data:photographers} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
 
   let phHtml = '';
   (photographers||[]).forEach(p=>{
     phHtml += `<div class="ph-item">
       <div>
-        <div style="font-weight:500">${escHtml(p.name||'Sin nombre')}</div>
+        <div style="font-weight:500; color:var(--text);">${escHtml(p.name||'Estudio sin nombre')}</div>
         <div style="font-size:11px;color:var(--muted)">${escHtml(p.email)}</div>
       </div>
-      <div>
-        <button class="btn-sm danger" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar por completo</button>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="btn-sm danger" style="padding:6px 12px; font-size:12px;" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar</button>
       </div>
     </div>`;
   });
 
   body.innerHTML = `
-    <div class="back-btn" onclick="loadPhotographerDashboard()">← Volver al estudio</div>
+    <div class="back-btn" onclick="showScreen('photographer')">← Volver al estudio</div>
     <h2 class="dash-title">Administración Global</h2>
-    <p class="dash-sub">Elimina de forma permanente las cuentas de fotógrafos y sus datos asociados</p>
+    <p class="dash-sub">Gestiona las cuentas de los fotógrafos registrados en la plataforma</p>
     <div class="admin-grid">
       <div class="admin-card">
-        <h3>Lista de Fotógrafos registrados</h3>
-        ${phHtml||'<p style="color:var(--muted);font-size:12px">No hay fotógrafos aún</p>'}
+        <h3>Fotógrafos registrados</h3>
+        <div style="margin-top:16px;">${phHtml||'<p style="color:var(--muted);font-size:12px">No hay fotógrafos aún</p>'}</div>
       </div>
     </div>`;
 }
 
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo y todas sus galerías automáticamente.")) return;
+  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo, sus sesiones, clientes y fotos de la base de datos AL INSTANTE.")) return;
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
   if(error) { toast('Error al eliminar fotógrafo'); return; }
-  toast('Fotógrafo eliminado con éxito ✓');
+  toast('Fotógrafo borrado por completo ✓');
   renderAdminPanel();
 }
 
@@ -450,6 +449,20 @@ async function renderSessionsList(){
 
 function openSession(id, name){ currentSession = {id, name}; renderSessionDetail(); }
 
+function cambiarVistaContrasena(id) {
+  const input = document.getElementById('pass-'+id);
+  const btn = document.getElementById('btn-eye-'+id);
+  if(input.style.webkitTextSecurity === 'disc' || input.type === 'password' || input.dataset.hidden === "true") {
+    input.textContent = input.dataset.pass;
+    input.dataset.hidden = "false";
+    btn.textContent = '🔒';
+  } else {
+    input.textContent = '••••••••';
+    input.dataset.hidden = "true";
+    btn.textContent = '👁️';
+  }
+}
+
 async function renderSessionDetail(){
   const body = document.getElementById('ph-body');
   body.innerHTML = '<div class="loading">Cargando detalles de la sesión…</div>';
@@ -475,7 +488,10 @@ async function renderSessionDetail(){
     html += `<tr>
       <td>${escHtml(c.name)}</td>
       <td>${escHtml(c.email)}</td>
-      <td><code>${escHtml(c.password_hash)}</code></td>
+      <td>
+        <span id="pass-${c.id}" data-pass="${escHtml(c.password_hash)}" data-hidden="true">••••••••</span>
+        <button id="btn-eye-${c.id}" class="btn-eye" onclick="cambiarVistaContrasena('${c.id}')">👁️</button>
+      </td>
       <td><span style="color:${c.selection_done?'#c9a96e':'#7a7268'}; font-weight:500">${c.selection_done ? '🌟 FINALIZADO' : '⏳ En proceso'}</span></td>
       <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar cliente</button></td>
     </tr>`;
@@ -570,21 +586,37 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
+// FINALIZACIÓN INTEGRAL ARREGLADA (¡Ya no se queda pillado!)
 async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía con un corazón antes de poder finalizar."); return; }
-  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán de la galería permanentemente. ¿Confirmas?`)) return;
+  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán de la galería permanentemente en este instante. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
-  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección…'; }
+  if(btn) { btn.disabled = true; btn.textContent = 'Guardando selección y liberando espacio…'; }
 
-  await sb.from('photos').eq('session_id', currentClientRow.session_id).notIn('id', idsFavoritos).delete();
-  await sb.from('clients').update({ selection_done: true, selection_done_at: new Date().toISOString() }).eq('id', currentClientRow.id);
-  
-  currentClientRow.selection_done = true;
-  toast('¡Selección guardada con éxito!');
-  renderClientGallery();
+  try {
+    // Conseguir TODAS las fotos de la sesión para calcular los descartes a mano
+    const {data: todasLasFotos} = await sb.from('photos').select('id').eq('session_id', currentClientRow.session_id);
+    const idsDescartes = (todasLasFotos||[]).map(p => p.id).filter(id => !idsFavoritos.includes(id));
+
+    // Borramos los descartes uno por uno o por lotes simples para evitar fallos de la API REST
+    if (idsDescartes.length > 0) {
+      await sb.from('photos').in('id', idsDescartes).delete();
+    }
+
+    // Actualizar el estado del cliente a finalizado
+    await sb.from('clients').update({ selection_done: true, selection_done_at: new Date().toISOString() }).eq('id', currentClientRow.id);
+    
+    currentClientRow.selection_done = true;
+    alert('¡Selección enviada con éxito! La galería ha sido optimizada.');
+    renderClientGallery();
+  } catch(e) {
+    console.error(e);
+    alert('Hubo un contratiempo guardando la selección. Revisa tu conexión.');
+    if(btn) { btn.disabled = false; btn.textContent = 'Finalizar y Guardar Selección'; }
+  }
 }
 
 async function toggleFav(photoId){
