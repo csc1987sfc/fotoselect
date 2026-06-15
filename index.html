@@ -6,7 +6,6 @@
 <title>FotoSelect — Galería Profesional</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet"/>
 <script>
-// Cliente directo REST para Supabase
 const SURL = 'https://urpjnmbhhbzeirktpzcv.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVycGpubWJoaGJ6ZWlya3RwemN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDU3NDQsImV4cCI6MjA5NTIyMTc0NH0.-DFxwerywoeoiOPzErn2PVCCosTKjuUMIVBBdXQ_RNE';
 
@@ -42,7 +41,6 @@ async function _restWrite(method, table, body, filters=''){
   }catch(e){return {data:null,error:{message:e.message}};}
 }
 
-// Autenticación
 const sbAuth = {
   async signUp({email,password,options:{data:meta}={}}){
     try{
@@ -69,7 +67,6 @@ const sbAuth = {
   onAuthStateChange(cb){ _authListeners.push(cb); _loadSession(); if(_session) setTimeout(()=>cb('INITIAL_SESSION',_session),0); return {data:{subscription:{unsubscribe:()=>{ _authListeners=_authListeners.filter(l=>l!==cb); }}}}; }
 };
 
-// Constructor de consultas (Query Builder)
 function sbFrom(table){
   const s={table,filters:[],cols:'*',orderCol:null,orderAsc:true,lim:null,isSingle:false,isHead:false,countMode:null};
   const qs=()=>{
@@ -130,7 +127,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .screen{display:none;min-height:100vh}
 .screen.active{display:flex;flex-direction:column}
 
-/* PANTALLA DE AUTH */
 #screen-auth{align-items:center;justify-content:center;padding:40px 20px;position:relative;overflow:hidden}
 #screen-auth::before{
   content:'';position:absolute;inset:0;
@@ -165,7 +161,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);border-radius:var(--r);padding:10px 14px;font-size:12px;color:#e07060;margin-bottom:16px;display:none}
 .err.show{display:block}
 
-/* CABECERA */
 .app-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:16px 32px;
@@ -181,7 +176,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .btn-sm:hover{border-color:var(--gold);color:var(--gold)}
 .btn-sm.danger:hover{border-color:var(--accent);color:var(--accent)}
 
-/* PANEL DE CONTROL */
 .dash-body{max-width:1100px;margin:0 auto;padding:40px 24px}
 .dash-title{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;margin-bottom:8px}
 .dash-title em{font-style:italic;color:var(--gold)}
@@ -213,7 +207,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .clients-table th{text-align:left;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border)}
 .clients-table td{padding:12px;border-bottom:1px solid var(--border);font-size:13px}
 
-/* VISTA DEL CLIENTE */
 .client-hero{text-align:center;margin-bottom:48px}
 .client-hero h2{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;margin-bottom:8px}
 .client-hero h2 em{font-style:italic;color:var(--gold)}
@@ -226,14 +219,12 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .client-photo.favorited{border-color:var(--gold)}
 .heart{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:50%;background:rgba(15,14,12,.65);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer}
 
-/* MODALES */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
 .modal-bg.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:100%;max-width:460px;position:relative}
 .modal h3{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:400;margin-bottom:24px}
 .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
 
-/* PANEL ADMIN GLOBAL */
 .admin-grid{display:grid;grid-template-columns:1fr;gap:32px;margin-top:32px}
 .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .ph-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
@@ -425,7 +416,7 @@ async function renderAdminPanel(){
 }
 
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Estás SEGURO? Se eliminará de forma irreversible el fotógrafo, sus sesiones, fotos, clientes y favoritos.")) return;
+  if(!confirm("⚠️ ¿Estás SEGURO? Se eliminará el fotógrafo por completo con todas sus galerías.")) return;
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
   if(error) { toast('Error al eliminar fotógrafo'); return; }
   toast('Fotógrafo eliminado con éxito ✓');
@@ -583,7 +574,7 @@ async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía con un corazón antes de poder finalizar."); return; }
-  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán permanentemente. ¿Confirmas?`)) return;
+  if(!confirm(`Vas a guardar un total de ${idsFavoritos.length} fotos favoritas. El resto se borrarán de la galería permanentemente en este instante. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
   if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección…'; }
