@@ -338,7 +338,7 @@ function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').f
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 
-// LOGIN
+// LOGIN CON VERIFICACIÓN COMERCIAL DE SUSPENSIÓN
 async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
@@ -348,6 +348,16 @@ async function handleLogin(){
   if(currentRole==='photographer'){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
+    
+    // CONTROL DE SUSPENSIÓN: Comprobar si el administrador ha marcado la cuenta como inactiva
+    const {data:profile} = await sb.from('profiles').select('active').eq('id',data.user.id).single();
+    if(profile && profile.active === false) {
+      showErr('login-err','⛔ Tu cuenta se encuentra suspendida temporalmente por impago. Contacta con soporte.');
+      await sb.auth.signOut();
+      currentUser = null;
+      return;
+    }
+
     currentUser = data.user;
     loadPhotographerDashboard();
   } else {
@@ -374,7 +384,6 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  // CORREGIDO: Ahora usa 'username' que es el nombre real de la columna en tu Supabase
   await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
   await sb.from('invite_codes').update({used:true, used_by:data.user.id}).eq('id',codes[0].id);
 
@@ -384,21 +393,30 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL FOTÓGRAFOS GLOBAL (ADMIN)
+// PANEL FOTÓGRAFOS GLOBAL (ADMIN) - MEJORADO PARA GESTIÓN COMERCIAL
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
-  body.innerHTML = '<div class="loading">Cargando lista de fotógrafos…</div>';
+  body.innerHTML = '<div class="loading">Cargando datos de administración…</div>';
   const {data:photographers} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
 
   let phHtml = '';
   (photographers||[]).forEach(p=>{
-    phHtml += `<div class="ph-item">
+    const isSuspended = p.active === false;
+    phHtml += `<div class="ph-item" style="border-bottom:1px solid var(--border); padding:14px 0; display:flex; align-items:center; justify-content:space-between;">
       <div>
-        <div style="font-weight:500; color:var(--text);">${escHtml(p.username||'Estudio sin nombre')}</div>
-        <div style="font-size:11px;color:var(--muted)">${escHtml(p.email)}</div>
+        <div style="font-weight:500; color:var(--text); font-size:14px;">${escHtml(p.username||'Estudio sin nombre')}</div>
+        <div style="font-size:11px; color:var(--muted); margin-top:2px;">${escHtml(p.email)}</div>
+        <div style="margin-top:6px;">
+          <span style="font-size:10px; font-weight:500; letter-spacing:0.05em; padding:3px 8px; border-radius:2px; background:${isSuspended ? 'rgba(192,57,43,0.15)' : 'rgba(201,169,110,0.15)'}; color:${isSuspended ? '#e07060' : 'var(--gold)'};">
+            ${isSuspended ? '🛑 SUSPENDIDO POR IMPAGO' : '🟢 CUENTA ACTIVA'}
+          </span>
+        </div>
       </div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <button class="btn-sm danger" style="padding:6px 12px; font-size:12px;" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar</button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn-sm" style="padding:6px 12px; font-size:11px; border-color:${isSuspended ? 'var(--gold)' : 'var(--muted)'}; color:${isSuspended ? 'var(--gold)' : 'var(--muted)'};" onclick="toggleSuspensionFotografo('${p.id}', ${p.active})">
+          ${isSuspended ? '✅ Activar' : '⛔ Suspender'}
+        </button>
+        <button class="btn-sm danger" style="padding:6px 12px; font-size:11px;" onclick="borrarFotografoTotal('${p.id}')">🗑️ Eliminar</button>
       </div>
     </div>`;
   });
@@ -406,13 +424,77 @@ async function renderAdminPanel(){
   body.innerHTML = `
     <div class="back-btn" onclick="showScreen('photographer')">← Volver al estudio</div>
     <h2 class="dash-title">Administración Global</h2>
-    <p class="dash-sub">Gestiona las cuentas de los fotógrafos registrados en la plataforma</p>
-    <div class="admin-grid">
-      <div class="admin-card">
-        <h3>Fotógrafos registrados</h3>
-        <div style="margin-top:16px;">${phHtml||'<p style="color:var(--muted);font-size:12px">No hay fotógrafos aún</p>'}</div>
+    <p class="dash-sub">Panel exclusivo de control comercial para gestionar altas, bajas y estados de pago</p>
+    
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:32px; margin-top:24px;">
+      
+      <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
+        <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px; color:var(--gold);">➕ Dar de Alta Fotógrafo</h3>
+        <div class="err" id="admin-reg-err" style="margin-bottom:16px;"></div>
+        <div class="field"><label>Nombre del Estudio o Fotógrafo</label><input type="text" id="admin-ph-name" placeholder="Ej: Juan García Fotografía"/></div>
+        <div class="field"><label>Email de Acceso</label><input type="email" id="admin-ph-email" placeholder="correo@estudio.com"/></div>
+        <div class="field"><label>Contraseña Temporal</label><input type="password" id="admin-ph-pass" placeholder="Mínimo 6 caracteres"/></div>
+        <button class="btn-primary" style="margin-top:12px;" onclick="crearFotografoDesdeAdmin()">Crear Cuenta Comercial</button>
       </div>
+
+      <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
+        <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px;">📸 Clientes Registrados en el SaaS</h3>
+        <div style="max-height:450px; overflow-y:auto; padding-right:6px;">
+          ${phHtml||'<p style="color:var(--muted); font-size:12px; padding:20px 0;">No hay fotógrafos registrados en el sistema de forma activa.</p>'}
+        </div>
+      </div>
+
     </div>`;
+}
+
+// FUNCIÓN PARA CREAR FOTÓGRAFOS DESDE TU PROPIO PANEL DE ADMIN
+async function crearFotografoDesdeAdmin(){
+  hideErr('admin-reg-err');
+  const name = document.getElementById('admin-ph-name').value.trim();
+  const email = document.getElementById('admin-ph-email').value.trim();
+  const pass = document.getElementById('admin-ph-pass').value;
+
+  if(!name || !email || !pass){ showErr('admin-reg-err','Por favor, rellena todos los campos'); return; }
+  if(pass.length < 6){ showErr('admin-reg-err','La contraseña debe tener al menos 6 caracteres'); return; }
+
+  toast('Generando credenciales...');
+  try {
+    const resAuth = await fetch(`${SURL}/auth/v1/signup`, {
+      method: 'POST',
+      headers: { 'apikey': SKEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const dAuth = await resAuth.json();
+    
+    if(dAuth.error || dAuth.error_description) {
+      showErr('admin-reg-err', dAuth.error_description || dAuth.error?.message || 'Error en el registro');
+      return;
+    }
+
+    const uid = dAuth.id || dAuth.user?.id;
+    await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
+
+    toast('¡Fotógrafo creado y activo! ✓');
+    renderAdminPanel();
+  } catch(e) {
+    showErr('admin-reg-err', e.message);
+  }
+}
+
+// FUNCIÓN PARA SUSPENDER O RE-ACTIVAR CUENTAS POR IMPAGO
+async function toggleSuspensionFotografo(idFotografo, estadoActual){
+  const nuevoEstado = !estadoActual;
+  const advertencia = nuevoEstado 
+    ? '¿Quieres volver a activar la cuenta de este fotógrafo?' 
+    : '⚠️ ¿Quieres SUSPENDER a este fotógrafo por impago? Se le denegará el acceso al panel inmediatamente.';
+    
+  if(!confirm(advertencia)) return;
+
+  const { error } = await sb.from('profiles').update({ active: nuevoEstado }).eq('id', idFotografo);
+  if(error) { toast('Error al modificar el estado'); return; }
+  
+  toast(nuevoEstado ? 'Cuenta activada correctamente ✓' : 'Cuenta congelada por impago ⛔');
+  renderAdminPanel();
 }
 
 async function borrarFotografoTotal(idFotografo){
@@ -426,7 +508,6 @@ async function borrarFotografoTotal(idFotografo){
 // PANEL FOTÓGRAFO INDIVIDUAL
 async function loadPhotographerDashboard(){
   showScreen('photographer');
-  // CORREGIDO: Pedimos 'username' en lugar de 'name'
   const {data:profile} = await sb.from('profiles').select('username').eq('id',currentUser.id).single();
   document.getElementById('ph-user-badge').textContent = profile?.username || currentUser.email;
   renderSessionsList();
