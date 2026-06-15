@@ -416,21 +416,21 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 // ── CONFIG ──
 const CLOUD_NAME  = 'dgp3tlqtq';
 const UPLOAD_PRESET = 'fotoselect';
-const ADMIN_ID = 'b28dcf3d-7d71-40f2-87f0-148d294b2328'; // Tu ID de administrador
+const ADMIN_ID = 'b28dcf3d-7d71-40f2-87f0-148d294b2328'; 
 
 // ── STATE ──
 let currentUser = null;
-let currentRole = 'photographer'; // 'photographer' | 'client'
-let currentSession = null; // for photographer detail view
+let currentRole = 'photographer'; 
+let currentSession = null; 
 let dashboardLoaded = false;
-let currentClientRow = null; // for client view
+let currentClientRow = null; 
 
 // ── TOAST ──
 let toastT;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
 
 // ── SCREENS ──
-function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+id).classList.add('active'); }
+function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+id).add ? document.getElementById('screen-'+id).classList.add('active') : document.getElementById('screen-'+id).className += ' active'; }
 
 // ── AUTH TAB ──
 function switchTab(t){
@@ -442,7 +442,7 @@ function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').f
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 
-// ── REGISTER (photographer only) ──
+// ── REGISTER ──
 async function handleRegister(){
   hideErr('reg-err');
   const code=document.getElementById('reg-code').value.trim();
@@ -454,7 +454,6 @@ async function handleRegister(){
   const btn=document.querySelector('#tab-register .btn-primary');
   btn.disabled=true; btn.textContent='Verificando código…';
   
-  // Validar código de invitación de forma pública
   const {data:invite, error:invErr} = await sb.from('invite_codes').select('*').eq('code', code);
   if(invErr || !invite || invite.length === 0 || invite[0].used){
     btn.disabled=false; btn.textContent='Crear cuenta de fotógrafo';
@@ -467,7 +466,6 @@ async function handleRegister(){
   btn.disabled=false; btn.textContent='Crear cuenta de fotógrafo';
   if(error){ showErr('reg-err',error.message); return; }
   
-  // Quemar código y actualizar perfil
   await Promise.all([
     sb.from('invite_codes').update({used: true}).eq('id', invite[0].id),
     sb.from('profiles').update({name}).eq('id',data.user.id)
@@ -491,7 +489,6 @@ async function handleLogin(){
     btn.disabled=false; btn.textContent='Entrar';
     if(error){ showErr('login-err','Email o contraseña incorrectos'); return; }
     currentUser = data.user;
-    // Comprobar si la cuenta está activa
     const {data:profile} = await sbFrom('profiles').select('active').eq('id',currentUser.id).single();
     if(profile && profile.active === false){ 
       await sb.auth.signOut();
@@ -499,10 +496,8 @@ async function handleLogin(){
       showErr('login-err','Tu cuenta ha sido desactivada. Contacta con el administrador.');
       return;
     }
-    console.log('Login OK, user id:', currentUser.id, 'admin?', currentUser.id===ADMIN_ID);
     await loadPhotographerDashboard();
   } else {
-    // login del cliente
     const {data:clients,error} = await sb.from('clients').select('*').eq('email',email);
     btn.disabled=false; btn.textContent='Entrar';
     if(error||!clients||clients.length===0){ showErr('login-err','Cliente no encontrado'); return; }
@@ -554,7 +549,7 @@ async function renderAdminPanel(){
           ? `<button class="btn-sm danger" onclick="deletePhotographer('${p.id}')">Desactivar</button>`
           : `<button class="btn-gold" style="font-size:10px;padding:5px 12px" onclick="activatePhotographer('${p.id}')">Activar</button>`
         }
-        <button class="btn-sm danger" style="padding:6px 10px;font-size:13px" onclick="eliminarFotografoPorCompleto('${p.id}','${escHtml(p.email||'')}')" title="Borrar permanentemente">🗑️</button>
+        <button class="btn-sm danger" style="padding:6px 10px;font-size:13px;margin-left:4px;background:rgba(192,57,43,0.1)" onclick="eliminarFotografoPorCompleto('${p.id}','${escHtml(p.email||'')}')" title="Borrar permanentemente">🗑️</button>
       </div>
     </div>`;
   });
@@ -567,7 +562,7 @@ async function renderAdminPanel(){
       <div class="admin-card">
         <h3>Códigos de invitación</h3>
         <div style="display:flex;gap:8px;margin-bottom:16px">
-          <input type="text" id="new-code-email" class="search-input" placeholder="Email del fotógrafo (opcional)" style="flex:1; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px; outline:none; font-family:inherit; font-size:13px;"/>
+          <input type="text" id="new-code-email" style="flex:1; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px; outline:none; font-family:inherit; font-size:13px;" placeholder="Email del fotógrafo (opcional)"/>
           <button class="btn-gold" onclick="generateCode()">+ Generar</button>
         </div>
         ${codesHtml||'<p style="color:var(--muted);font-size:12px">No hay códigos aún</p>'}
@@ -617,26 +612,23 @@ async function activatePhotographer(id){
   renderAdminPanel();
 }
 
-// BORRADO FULMINANTE DESDE PANEL ADMIN
 async function eliminarFotografoPorCompleto(id, email) {
-  if(!confirm(`⚠️ ¿ESTÁS SEGURO? \nEsto eliminará permanentemente al fotógrafo (${email}) junto con todas sus sesiones, clientes y fotos de la base de datos AL INSTANTE.`)) return;
+  if(!confirm(`⚠️ ¿ESTÁS ABSOLUTAMENTE SEGURO? \nEsto eliminará permanentemente al fotógrafo (${email}) junto con todas sus sesiones, clientes y fotos de la base de datos AL INSTANTE.`)) return;
   const reconfirmar = prompt(`Para confirmar el borrado definitivo, escribe la palabra "ELIMINAR":`);
   if (reconfirmar !== "ELIMINAR") { alert("Confirmación incorrecta. Acción cancelada."); return; }
   
-  // 1. Conseguir todas las sesiones de este fotógrafo para borrar favoritos en cascada manual
   const {data: sses} = await sbFrom('sessions').select('id').eq('photographer_id', id);
   if(sses && sses.length > 0){
     const sIds = sses.map(s => s.id);
     const {data: cls} = await sbFrom('clients').select('id').in('session_id', sIds);
     if(cls && cls.length > 0){
-       await sbFrom('favorites').in('client_id', cls.map(c => c.id));
+       await sbFrom('favorites').in('client_id', cls.map(c => c.id)).delete();
     }
     await sbFrom('clients').in('session_id', sIds).delete();
     await sbFrom('photos').in('session_id', sIds).delete();
-    await sbFrom('sessions').in('session_id', sIds).delete();
+    await sbFrom('sessions').in('id', sIds).delete();
   }
   
-  // 2. Eliminar el perfil definitivo
   await sbFrom('profiles').eq('id', id).delete();
   toast('Fotógrafo eliminado por completo ✓');
   await new Promise(r=>setTimeout(r,400));
@@ -648,7 +640,6 @@ async function eliminarFotografoPorCompleto(id, email) {
   const {data:{session}} = await sb.auth.getSession();
   if(session){ 
     currentUser=session.user; 
-    console.log('Session restored, user id:', currentUser.id, 'admin?', currentUser.id===ADMIN_ID);
     await loadPhotographerDashboard(); 
   } else {
     showScreen('auth');
@@ -724,7 +715,7 @@ async function deleteSession(id, name){
   if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
   const {data:cls} = await sbFrom('clients').select('id').eq('session_id',id);
   if(cls && cls.length > 0){
-     await sbFrom('favorites').in('client_id', cls.map(c=>c.id));
+     await sbFrom('favorites').in('client_id', cls.map(c=>c.id)).delete();
   }
   await sbFrom('clients').eq('session_id',id).delete();
   await sbFrom('photos').eq('session_id',id).delete();
@@ -770,7 +761,7 @@ function togglePasswordVisibility(btn, spanId) {
   } else {
     span.textContent = "••••••••";
     span.dataset.hidden = "true";
-    btn.textContent = "👁️";
+    btn.textContent = "👁";
   }
 }
 
@@ -847,10 +838,10 @@ async function renderSessionDetail(){
         <td>${escHtml(c.email)}</td>
         <td style="font-family:monospace;font-size:12px;color:var(--muted)">
           <span id="${spanId}" data-password="${escHtml(c.password_hash)}" data-hidden="true">••••••••</span>
-          <button class="toggle-password-btn" onclick="togglePasswordVisibility(this, '${spanId}')">👁️</button>
+          <button class="toggle-password-btn" onclick="togglePasswordVisibility(this, '${spanId}')">👁</button>
         </td>
         <td><span style="color:var(--gold)">${favCount||0}</span> fotos</td>
-        <td>${c.selection_done ? '<span style="color:var(--gold);font-size:11px">✓ Finalizado</span>' : '<span style="color:var(--muted);font-size:11px">Pendiente</span>'}</td>
+        <td>${c.selection_done ? '<span style="color:var(--gold);font-size:11px;font-weight:500">✓ Finalizado</span>' : '<span style="color:var(--muted);font-size:11px">Pendiente</span>'}</td>
         <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar</button></td>
       </tr>`;
     }
@@ -909,7 +900,7 @@ async function handleFiles(files){
     fill.style.width=(done/arr.length*100)+'%';
   }
   setTimeout(()=>{ bar.style.display='none'; fill.style.width='0%'; },400);
-  toast(`${arr.length} foto${arr.length>1?'s':''} subida${arr.length>1?'s':''} ✓`);
+  toast(`${arr.length} fotos procesadas ✓`);
   renderSessionDetail();
 }
 
@@ -922,10 +913,7 @@ function handleDrop(e){
 async function deletePhoto(id, url){
   if(!confirm('¿Eliminar esta foto?')) return;
   await sbFrom('favorites').eq('photo_id', id).delete();
-  await fetch(`${SURL}/rest/v1/photos?id=eq.${id}`, {
-    method: 'DELETE',
-    headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`}
-  });
+  await sbFrom('photos').eq('id', id).delete();
   toast('Foto eliminada');
   await renderSessionDetail();
 }
@@ -951,7 +939,7 @@ async function createClient(){
   const email=document.getElementById('client-email').value.trim();
   const pass=document.getElementById('client-pass').value.trim();
   if(!name||!email||!pass){ showErr('client-err','Rellena todos los campos'); return; }
-  const {error} = await sb.from('clients').insert({name, email, password_hash:pass, session_id:currentSession.id, photographer_id:currentUser.id});
+  const {error} = await sb.from('clients').insert({name, email, password_hash:pass, session_id:currentSession.id, photographer_id:currentUser.id, selection_done:false});
   if(error){ showErr('client-err',error.message); return; }
   closeModal('modal-client');
   toast(`Acceso creado para ${name} ✓`);
@@ -979,6 +967,10 @@ async function renderClientGallery(){
   const body = document.getElementById('cl-body');
   body.innerHTML = '<div class="loading">Cargando tus fotos…</div>';
 
+  // Volver a consultar el estado real del cliente por si ya finalizó
+  const {data:clRefresh} = await sb.from('clients').select('*').eq('id',currentClientRow.id).single();
+  if(clRefresh) currentClientRow = clRefresh;
+
   const [{data:photos},{data:favs},{data:session}] = await Promise.all([
     sb.from('photos').select('*').eq('session_id',currentClientRow.session_id).order('created_at',{ascending:false}),
     sb.from('favorites').select('photo_id').eq('client_id',currentClientRow.id),
@@ -995,7 +987,7 @@ async function renderClientGallery(){
     <div style="text-align:center;margin-bottom:24px">
       <div class="fav-counter" id="fav-counter-box">❤ Has seleccionado <strong id="fav-count-num">${favSet.size}</strong> de ${(photos||[]).length} fotos</div>
       ${currentClientRow.selection_done ? 
-        `<div style="margin-top:12px;color:var(--gold);font-size:13px;letter-spacing:0.06em">✓ Selección finalizada</div>` :
+        `<div style="margin-top:12px;color:var(--gold);font-size:14px;letter-spacing:0.06em;font-weight:500">✓ Tu selección ha sido guardada y enviada con éxito</div>` :
         `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccion()" style="margin-top:16px;max-width:280px;margin-left:auto;margin-right:auto;display:block">Finalizar selección</button>`
       }
     </div>
@@ -1005,14 +997,13 @@ async function renderClientGallery(){
     const isFav = favSet.has(p.id);
     html += `<div class="client-photo ${isFav?'favorited':''}" id="cp-${p.id}">
       <img src="${p.url}" alt="" loading="lazy" onclick="openClientLightbox('${p.id}')" style="cursor:zoom-in"/>
-      <div class="heart" onclick="toggleFav('${p.id}')" title="${isFav?'Quitar de favoritas':'Añadir a favoritas'}">${isFav?'❤':'🤍'}</div>
+      ${currentClientRow.selection_done ? '' : `<div class="heart" onclick="toggleFav('${p.id}')">${isFav?'❤':'🤍'}</div>`}
     </div>`;
   }
   html += '</div>';
   body.innerHTML = html;
 }
 
-// Client lightbox
 let clientPhotos = [];
 let clientLbIndex = 0;
 
@@ -1038,47 +1029,48 @@ function showClientLb(){
 document.getElementById('lb-prev').addEventListener('click',(e)=>{ e.stopPropagation(); clientLbIndex--; showClientLb(); });
 document.getElementById('lb-next').addEventListener('click',(e)=>{ e.stopPropagation(); clientLbIndex++; showClientLb(); });
 
-// CLIENTE FINALIZA SELECCIÓN Y SE LIMPIA EL ESPACIO SOBRANTE AL INSTANTE
+// ACCIÓN FULMINANTE DE FINALIZACIÓN
 async function finalizarSeleccion(){
-  const seguro = confirm("¿Estás completamente seguro de finalizar? Las fotos NO seleccionadas se eliminarán permanentemente de la galería en este mismo instante para procesar tu pedido.");
+  const seguro = confirm("¿Estás completamente seguro de finalizar? Las fotos NO seleccionadas se eliminarán de la nube de forma PERMANENTE e inmediata para ahorrar espacio. Confirma si estás listo.");
   if (!seguro) return;
 
   const btn = document.getElementById('btn-finalizar');
-  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección y limpiando galería…'; }
+  if(btn) { btn.disabled = true; btn.textContent = 'Procesando y liberando espacio…'; }
 
   try {
-    // 1. Conseguir fotos marcadas como favoritas por este cliente
+    // 1. Obtener las favoritas reales del cliente
     const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
     const idsElegidos = (favs||[]).map(f => f.photo_id);
 
-    if (idsElegidos.length === 0) {
-      alert("Debes seleccionar al menos una foto favorita antes de poder dar por finalizada la selección.");
+    if (!idsElegidos || idsElegidos.length === 0) {
+      alert("Debes marcar al menos una foto con el corazón antes de poder finalizar.");
       if(btn) { btn.disabled = false; btn.textContent = 'Finalizar selección'; }
       return;
     }
 
-    // 2. Borrar de la tabla 'photos' las que NO estén en la lista de elegidas para esta sesión concreta
+    // 2. BORRADO DIRECTO: Eliminar de 'photos' todo lo que NO esté en favoritos para esta sesión
     await sb.from('photos').delete().eq('session_id', currentClientRow.session_id).not('id', 'in', `(${idsElegidos.join(',')})`);
 
-    // 3. Marcar cliente como finalizado
+    // 3. ACTUALIZAR CLIENTE DIRECTAMENTE USANDO FETCH PARA SALTARNOS BLOQUEOS
     await fetch(`${SURL}/rest/v1/clients?id=eq.${currentClientRow.id}`, {
       method: 'PATCH',
-      headers: {'apikey': SKEY, 'Authorization': `Bearer ${_token()}`, 'Content-Type': 'application/json'},
+      headers: _headers(),
       body: JSON.stringify({selection_done: true, selection_done_at: new Date().toISOString()})
     });
 
     currentClientRow.selection_done = true;
-    toast('¡Selección procesada y espacio liberado con éxito!');
+    alert("¡Selección guardada! Las fotos sobrantes han sido eliminadas para optimizar el almacenamiento.");
     renderClientGallery();
 
   } catch (e) {
     console.error(e);
-    alert("Hubo un contratiempo al procesar tu selección. Por favor, inténtalo de nuevo.");
+    alert("Hubo un contratiempo técnico. Inténtalo una vez más.");
     if(btn) { btn.disabled = false; btn.textContent = 'Finalizar selección'; }
   }
 }
 
 async function toggleFav(photoId){
+  if(currentClientRow.selection_done) return;
   const favs = await sbFrom('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
   const card = document.getElementById('cp-'+photoId);
   const heart = card.querySelector('.heart');
