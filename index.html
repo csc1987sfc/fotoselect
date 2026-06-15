@@ -374,7 +374,8 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  await sb.from('profiles').insert({id:data.user.id, name, email, active:true});
+  // Corregido para que apunte exactamente a tu tabla real 'profiles'
+  await sb.from('profiles').insert({id:data.user.id, name:name, email:email, active:true});
   await sb.from('invite_codes').update({used:true, used_by:data.user.id}).eq('id',codes[0].id);
 
   currentUser = data.user;
@@ -586,7 +587,6 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
-// FINALIZACIÓN INTEGRAL ARREGLADA
 async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
