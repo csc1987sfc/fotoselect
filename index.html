@@ -396,9 +396,13 @@ async function handleLogin(){
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
     let {data:profile} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+    
+    // Si la ficha no existe, significa que el Admin lo ha borrado (y el usuario sigue en Auth). No le dejamos pasar.
     if(!profile) {
-        await sb.from('profiles').insert({ id: data.user.id, email: email, username: email.split('@')[0], active: true });
-        profile = { active: true };
+        showErr('login-err','⛔ Tu cuenta ha sido eliminada de la plataforma.');
+        await sb.auth.signOut();
+        currentUser = null;
+        return;
     }
 
     if(profile && profile.active === false) {
@@ -449,7 +453,6 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL ADMIN GLOBAL (A DOS COLUMNAS CON BLINDAJE)
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
@@ -460,7 +463,7 @@ async function renderAdminPanel(){
   let phHtml = '';
   (photographers||[]).forEach(p=>{
     const isSuspended = p.active === false;
-    const isAdmin = p.email === 'csc87sfc@gmail.com'; // Detecta tu cuenta
+    const isAdmin = p.email === 'csc87sfc@gmail.com'; 
 
     phHtml += `<div class="ph-item">
       <div>
