@@ -95,7 +95,6 @@ function sbFrom(table){
     limit(n){ s.lim=n; return b; },
     single(){ s.isSingle=true; return b; },
     async insert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data]); },
-    async upsert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data], 'on_conflict=id'); },
     async update(data){ return _restWrite('PATCH',s.table,data,fqs()); },
     async delete(){ return _restWrite('DELETE',s.table,undefined,fqs()); },
     then(res,rej){ return _restGet(s.table,qs(),{single:s.isSingle,head:s.isHead,count:s.countMode}).then(res,rej); }
@@ -179,6 +178,10 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .dash-title em{font-style:italic;color:var(--gold)}
 .dash-sub{font-size:12px;color:var(--muted);letter-spacing:0.06em;margin-bottom:40px}
 
+/* NUEVA DISPOSICIÓN A DOS COLUMNAS PARA EL ADMIN */
+.admin-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; align-items: start; }
+@media (max-width: 800px) { .admin-cols { grid-template-columns: 1fr; } }
+
 .sessions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:48px}
 .session-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;position:relative;cursor:pointer;transition:border-color .2s,transform .2s}
 .session-card:hover{border-color:var(--gold);transform:translateY(-2px)}
@@ -225,7 +228,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .modal h3{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:400;margin-bottom:24px}
 .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
 
-.admin-grid{display:grid;grid-template-columns:1fr;gap:32px;margin-top:32px}
 .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .ph-item{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);font-size:13px}
 
@@ -350,6 +352,7 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
+    // Verificación de suspensión
     const {data:profile} = await sb.from('profiles').select('active').eq('id',data.user.id).single();
     if(profile && profile.active === false) {
       showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
@@ -370,6 +373,7 @@ async function handleLogin(){
   }
 }
 
+// REGISTRO INICIAL (Tú como Admin)
 async function handleRegister(){
   hideErr('reg-err');
   const code=document.getElementById('reg-code').value.trim();
@@ -384,11 +388,15 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  // USO DE UPSERT (Actualizar en vez de Duplicar)
-  const {error: profErr} = await sb.from('profiles').upsert({id:data.user.id, username:name, email:email, active:true});
+  // Si Supabase ya lo creó en segundo plano, actualizamos el nombre. Si no, lo insertamos.
+  const {error: profErr} = await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
   if (profErr) {
-      alert("❌ ERROR DE SUPABASE AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
-      return;
+      if(profErr.code === '23505' || profErr.message.includes('duplicate')) {
+          await sb.from('profiles').update({username:name, email:email, active:true}).eq('id', data.user.id);
+      } else {
+          alert("❌ ERROR AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
+          return;
+      }
   }
 
   await sb.from('invite_codes').update({used:true, used_by:data.user.id}).eq('id',codes[0].id);
@@ -399,14 +407,14 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL ADMIN GLOBAL
+// PANEL ADMIN GLOBAL (A DOS COLUMNAS)
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
   const {data:photographers, error: fetchErr} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
 
   if (fetchErr) {
-      alert("❌ ERROR DE SUPABASE AL LEER PERFILES:\n" + JSON.stringify(fetchErr));
+      alert("❌ ERROR AL LEER PERFILES:\n" + JSON.stringify(fetchErr));
   }
 
   let phHtml = '';
@@ -436,9 +444,9 @@ async function renderAdminPanel(){
     <h2 class="dash-title">Administración Global</h2>
     <p class="dash-sub">Gestión comercial exclusiva</p>
     
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:32px; margin-top:24px;">
+    <div class="admin-cols">
       
-      <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
+      <div class="admin-card">
         <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px; color:var(--gold);">➕ Dar de Alta Fotógrafo</h3>
         <div class="err" id="admin-reg-err" style="margin-bottom:16px;"></div>
         <div class="field"><label>Nombre del Estudio</label><input type="text" id="admin-ph-name" placeholder="Ej: Juan García"/></div>
@@ -447,7 +455,7 @@ async function renderAdminPanel(){
         <button class="btn-primary" style="margin-top:12px;" onclick="crearFotografoDesdeAdmin()">Crear Cuenta</button>
       </div>
 
-      <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
+      <div class="admin-card">
         <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px;">📸 Clientes Registrados</h3>
         <div style="max-height:450px; overflow-y:auto; padding-right:6px;">
           ${phHtml||'<p style="color:var(--muted); font-size:12px; padding:20px 0;">No hay fotógrafos registrados activamente.</p>'}
@@ -456,7 +464,7 @@ async function renderAdminPanel(){
     </div>`;
 }
 
-// CREACIÓN DE USUARIOS DESDE EL ADMIN CON UPSERT
+// CREACIÓN DE USUARIOS DESDE EL ADMIN
 async function crearFotografoDesdeAdmin(){
   hideErr('admin-reg-err');
   const name = document.getElementById('admin-ph-name').value.trim();
@@ -486,16 +494,20 @@ async function crearFotografoDesdeAdmin(){
         return;
     }
 
-    // USO DE UPSERT PARA EVITAR EL BLOQUEO
-    const { error: insErr } = await sb.from('profiles').upsert({ id: uid, username: name, email: email, active: true });
+    // SI LA BASE DE DATOS YA LO HA CREADO, LO ACTUALIZAMOS
+    const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
     if(insErr) {
-        alert("❌ ERROR DE SUPABASE AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
-        return;
+        if(insErr.code === '23505' || insErr.message.includes('duplicate')) {
+            await sb.from('profiles').update({username: name, email: email, active: true}).eq('id', uid);
+        } else {
+            alert("❌ ERROR AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
+            return;
+        }
     }
 
     toast('¡Fotógrafo creado y activo! ✓');
     
-    // Limpiamos las casillas para que no haya dobles clics
+    // Limpiamos las casillas para evitar dobles clics accidentales
     document.getElementById('admin-ph-name').value = '';
     document.getElementById('admin-ph-email').value = '';
     document.getElementById('admin-ph-pass').value = '';
@@ -654,7 +666,7 @@ async function createSession(){
   
   const {error: sessErr} = await sb.from('sessions').insert({photographer_id:currentUser.id, name, description:desc});
   if(sessErr) {
-      alert("❌ ERROR DE SUPABASE AL CREAR SESIÓN:\n" + JSON.stringify(sessErr));
+      alert("❌ ERROR AL CREAR SESIÓN:\n" + JSON.stringify(sessErr));
       return;
   }
   
