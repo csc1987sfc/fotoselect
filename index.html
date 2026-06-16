@@ -178,7 +178,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .dash-title em{font-style:italic;color:var(--gold)}
 .dash-sub{font-size:12px;color:var(--muted);letter-spacing:0.06em;margin-bottom:40px}
 
-/* DISEÑO A DOS COLUMNAS EN ESCRITORIO */
 .admin-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; align-items: start; }
 @media (max-width: 800px) { .admin-cols { grid-template-columns: 1fr; } }
 
@@ -216,7 +215,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .fav-counter{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:8px 18px;font-size:12px;color:var(--muted)}
 .fav-counter strong{color:var(--gold)}
 
-/* REGLA DEFINITIVA: CUADRÍCULA DE FOTOS CLIENTE Y CORAZONES ROJOS */
 .client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px, 1fr));gap:12px;padding:0 10px;}
 .client-photo{position:relative;aspect-ratio:1;border-radius:var(--r);overflow:hidden;border:2px solid transparent;background:var(--surface);}
 .client-photo img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;}
@@ -229,16 +227,12 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
   .photo-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; }
 }
 
-/* ========================================================= */
-/* CÓDIGO RESTAURADO: VENTANAS EMERGENTES (MODALS) CENTRADAS */
-/* ========================================================= */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
 .modal-bg.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:100%;max-width:460px;position:relative;box-shadow:0 10px 40px rgba(0,0,0,0.5);}
 .modal h3{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:400;margin-bottom:24px}
 .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
 
-/* VISOR DE FOTOS EN GRANDE (LIGHTBOX) */
 .lightbox-modal { position: fixed; inset: 0; background: rgba(10,9,8,0.96); display: none; align-items: center; justify-content: center; z-index: 200; cursor: zoom-out; backdrop-filter: blur(8px); }
 .lightbox-modal.open { display: flex; }
 .lightbox-modal img { max-width: 95%; max-height: 92%; object-fit: contain; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
@@ -361,7 +355,6 @@ function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; document.getElementById('lightbox').classList.add('open'); }
 
-// TURBO COMPRESOR DE IMÁGENES ANTES DE ENVIAR
 function optimizarYComprimir(file) {
   return new Promise((resolve) => {
     if (!file.type.startsWith('image/')) { resolve(file); return; }
@@ -392,7 +385,6 @@ function optimizarYComprimir(file) {
   });
 }
 
-// LOGIN CON AUTO-REPARACIÓN
 async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
@@ -428,7 +420,6 @@ async function handleLogin(){
   }
 }
 
-// REGISTRO INICIAL SEGURO
 async function handleRegister(){
   hideErr('reg-err');
   const code=document.getElementById('reg-code').value.trim();
@@ -458,7 +449,6 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL ADMIN GLOBAL
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
@@ -536,7 +526,10 @@ async function crearFotografoDesdeAdmin(){
     }
 
     const uid = dAuth.id || dAuth.user?.id;
-    if(!uid) { showErr('admin-reg-err', 'No se pudo generar ID.'); return; }
+    if(!uid) { 
+        showErr('admin-reg-err', 'Este email ya está registrado oculto en Supabase (Authentication). Usa uno nuevo o bórralo de allí.'); 
+        return; 
+    }
 
     const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
     if(insErr) {
@@ -571,7 +564,6 @@ async function borrarFotografoTotal(idFotografo){
   renderAdminPanel();
 }
 
-// DASHBOARD FOTÓGRAFO
 async function loadPhotographerDashboard(){
   showScreen('photographer');
   const adminBtn = document.getElementById('admin-btn');
@@ -649,7 +641,6 @@ async function renderSessionDetail(){
   body.innerHTML = html;
 }
 
-// MANEJADOR OPTIMIZADO PARA SUBIDAS RÁPIDAS
 async function handleFiles(files){
   toast('Optimizando y subiendo imágenes...');
   for(const f of files){
@@ -704,7 +695,6 @@ async function createClient(){
   renderSessionDetail();
 }
 
-// INTERFAZ DEL CLIENTE
 async function loadClientView(){ showScreen('client'); renderClientGallery(); }
 
 async function renderClientGallery(){
