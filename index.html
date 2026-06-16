@@ -338,7 +338,7 @@ function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').f
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 
-// LOGIN CON COMPROBACIÓN DE SUSPENSIÓN COMERCIAL
+// LOGIN 
 async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
@@ -349,10 +349,9 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
-    // Verificación comercial de suspensión por impago
     const {data:profile} = await sb.from('profiles').select('active').eq('id',data.user.id).single();
     if(profile && profile.active === false) {
-      showErr('login-err','⛔ Tu cuenta se encuentra suspendida temporalmente por impago. Contacta con soporte.');
+      showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
       await sb.auth.signOut();
       currentUser = null;
       return;
@@ -384,7 +383,13 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
+  // CHIVATO DE ERROR AL CREAR PERFIL
+  const {error: profErr} = await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
+  if (profErr) {
+      alert("❌ ERROR DE SUPABASE AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
+      return;
+  }
+
   await sb.from('invite_codes').update({used:true, used_by:data.user.id}).eq('id',codes[0].id);
 
   currentUser = data.user;
@@ -393,11 +398,15 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL FOTÓGRAFOS GLOBAL (ADMIN) - COMPLETO CON ALTAS Y SUSPENSIONES
+// PANEL ADMIN GLOBAL
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
-  body.innerHTML = '<div class="loading">Cargando datos de administración comercial…</div>';
-  const {data:photographers} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
+  body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
+  const {data:photographers, error: fetchErr} = await sb.from('profiles').select('*').order('created_at',{ascending:false});
+
+  if (fetchErr) {
+      alert("❌ ERROR DE SUPABASE AL LEER PERFILES:\n" + JSON.stringify(fetchErr));
+  }
 
   let phHtml = '';
   (photographers||[]).forEach(p=>{
@@ -408,7 +417,7 @@ async function renderAdminPanel(){
         <div style="font-size:11px; color:var(--muted); margin-top:2px;">${escHtml(p.email)}</div>
         <div style="margin-top:6px;">
           <span style="font-size:10px; font-weight:500; letter-spacing:0.05em; padding:3px 8px; border-radius:2px; background:${isSuspended ? 'rgba(192,57,43,0.15)' : 'rgba(201,169,110,0.15)'}; color:${isSuspended ? '#e07060' : 'var(--gold)'};">
-            ${isSuspended ? '🛑 SUSPENDIDO POR IMPAGO' : '🟢 CUENTA ACTIVA'}
+            ${isSuspended ? '🛑 SUSPENDIDO' : '🟢 ACTIVA'}
           </span>
         </div>
       </div>
@@ -424,32 +433,29 @@ async function renderAdminPanel(){
   body.innerHTML = `
     <div class="back-btn" onclick="showScreen('photographer')">← Volver al estudio</div>
     <h2 class="dash-title">Administración Global</h2>
-    <p class="dash-sub">Panel exclusivo de control comercial para gestionar altas, bajas y estados de pago</p>
+    <p class="dash-sub">Gestión comercial exclusiva</p>
     
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:32px; margin-top:24px;">
       
-      <!-- COLUMNA IZQUIERDA: CREACIÓN DIRECTA DE FOTÓGRAFOS -->
       <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
         <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px; color:var(--gold);">➕ Dar de Alta Fotógrafo</h3>
         <div class="err" id="admin-reg-err" style="margin-bottom:16px;"></div>
-        <div class="field"><label>Nombre del Estudio o Fotógrafo</label><input type="text" id="admin-ph-name" placeholder="Ej: Juan García Fotografía"/></div>
+        <div class="field"><label>Nombre del Estudio</label><input type="text" id="admin-ph-name" placeholder="Ej: Juan García"/></div>
         <div class="field"><label>Email de Acceso</label><input type="email" id="admin-ph-email" placeholder="correo@estudio.com"/></div>
-        <div class="field"><label>Contraseña Temporal</label><input type="password" id="admin-ph-pass" placeholder="Mínimo 6 caracteres"/></div>
-        <button class="btn-primary" style="margin-top:12px;" onclick="crearFotografoDesdeAdmin()">Crear Cuenta Comercial</button>
+        <div class="field"><label>Contraseña</label><input type="password" id="admin-ph-pass" placeholder="Mínimo 6 caracteres"/></div>
+        <button class="btn-primary" style="margin-top:12px;" onclick="crearFotografoDesdeAdmin()">Crear Cuenta</button>
       </div>
 
-      <!-- COLUMNA DERECHA: LISTADO Y CONTROL ACCIONES -->
       <div class="admin-card" style="background:var(--surface); border:1px solid var(--border); padding:24px; border-radius:var(--r);">
-        <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px;">📸 Clientes Registrados en el SaaS</h3>
+        <h3 style="font-family:'Playfair Display',serif; font-size:1.2rem; margin-bottom:16px;">📸 Clientes Registrados</h3>
         <div style="max-height:450px; overflow-y:auto; padding-right:6px;">
-          ${phHtml||'<p style="color:var(--muted); font-size:12px; padding:20px 0;">No hay fotógrafos registrados en el sistema de forma activa.</p>'}
+          ${phHtml||'<p style="color:var(--muted); font-size:12px; padding:20px 0;">No hay fotógrafos registrados activamente.</p>'}
         </div>
       </div>
-
     </div>`;
 }
 
-// CREACIÓN DIRECTA DE USUARIOS DESDE EL PANEL DE ADMIN
+// CREACIÓN DE USUARIOS DESDE EL ADMIN
 async function crearFotografoDesdeAdmin(){
   hideErr('admin-reg-err');
   const name = document.getElementById('admin-ph-name').value.trim();
@@ -474,7 +480,17 @@ async function crearFotografoDesdeAdmin(){
     }
 
     const uid = dAuth.id || dAuth.user?.id;
-    await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
+    if(!uid) {
+        showErr('admin-reg-err', 'No se pudo generar ID. Verifica el email.');
+        return;
+    }
+
+    // CHIVATO DE ERROR
+    const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
+    if(insErr) {
+        alert("❌ ERROR DE SUPABASE AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
+        return;
+    }
 
     toast('¡Fotógrafo creado y activo! ✓');
     renderAdminPanel();
@@ -483,26 +499,25 @@ async function crearFotografoDesdeAdmin(){
   }
 }
 
-// CAMBIAR ESTADO DE SUSPENSIÓN POR IMPAGO
 async function toggleSuspensionFotografo(idFotografo, estadoActual){
   const nuevoEstado = !estadoActual;
   const advertencia = nuevoEstado 
     ? '¿Quieres volver a activar la cuenta de este fotógrafo?' 
-    : '⚠️ ¿Quieres SUSPENDER a este fotógrafo por impago? Se le denegará el acceso al panel inmediatamente.';
+    : '⚠️ ¿Quieres SUSPENDER a este fotógrafo por impago? Se le denegará el acceso.';
     
   if(!confirm(advertencia)) return;
 
   const { error } = await sb.from('profiles').update({ active: nuevoEstado }).eq('id', idFotografo);
-  if(error) { toast('Error al modificar el estado'); return; }
+  if(error) { alert('Error al modificar estado: ' + JSON.stringify(error)); return; }
   
   toast(nuevoEstado ? 'Cuenta activada correctamente ✓' : 'Cuenta congelada por impago ⛔');
   renderAdminPanel();
 }
 
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo, sus sesiones, clientes y fotos de la base de datos AL INSTANTE.")) return;
+  if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo y sus datos AL INSTANTE.")) return;
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
-  if(error) { toast('Error al eliminar fotógrafo'); return; }
+  if(error) { alert('Error al eliminar fotógrafo: ' + JSON.stringify(error)); return; }
   toast('Fotógrafo borrado por completo ✓');
   renderAdminPanel();
 }
@@ -511,7 +526,6 @@ async function borrarFotografoTotal(idFotografo){
 async function loadPhotographerDashboard(){
   showScreen('photographer');
   
-  // FILTRO DE SEGURIDAD EXCLUSIVO PARA EL ADMINISTRADOR SUPREMO
   const adminBtn = document.getElementById('admin-btn');
   if (currentUser && currentUser.email === 'csc87sfc@gmail.com') {
     adminBtn.style.display = ''; 
@@ -601,7 +615,12 @@ async function handleFiles(files){
     try {
       const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
       const d = await res.json();
-      await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
+      
+      // CHIVATO DE ERROR DE FOTO
+      const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
+      if(photoErr) {
+          alert("❌ ERROR AL GUARDAR FOTO EN SUPABASE:\n" + JSON.stringify(photoErr));
+      }
     } catch(e) { console.error(e); }
   }
   toast('Subida completa ✓');
@@ -626,7 +645,14 @@ async function createSession(){
   const name=document.getElementById('session-name').value.trim();
   const desc=document.getElementById('session-desc').value.trim();
   if(!name) return;
-  await sb.from('sessions').insert({photographer_id:currentUser.id, name, description:desc});
+  
+  // CHIVATO DE ERROR AL CREAR SESIÓN
+  const {error: sessErr} = await sb.from('sessions').insert({photographer_id:currentUser.id, name, description:desc});
+  if(sessErr) {
+      alert("❌ ERROR DE SUPABASE AL CREAR SESIÓN:\n" + JSON.stringify(sessErr));
+      return;
+  }
+  
   closeModal('modal-session');
   renderSessionsList();
 }
