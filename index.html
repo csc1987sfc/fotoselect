@@ -95,6 +95,7 @@ function sbFrom(table){
     limit(n){ s.lim=n; return b; },
     single(){ s.isSingle=true; return b; },
     async insert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data]); },
+    async upsert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data], 'on_conflict=id'); },
     async update(data){ return _restWrite('PATCH',s.table,data,fqs()); },
     async delete(){ return _restWrite('DELETE',s.table,undefined,fqs()); },
     then(res,rej){ return _restGet(s.table,qs(),{single:s.isSingle,head:s.isHead,count:s.countMode}).then(res,rej); }
@@ -383,8 +384,8 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  // CHIVATO DE ERROR AL CREAR PERFIL
-  const {error: profErr} = await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
+  // USO DE UPSERT (Actualizar en vez de Duplicar)
+  const {error: profErr} = await sb.from('profiles').upsert({id:data.user.id, username:name, email:email, active:true});
   if (profErr) {
       alert("❌ ERROR DE SUPABASE AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
       return;
@@ -455,7 +456,7 @@ async function renderAdminPanel(){
     </div>`;
 }
 
-// CREACIÓN DE USUARIOS DESDE EL ADMIN
+// CREACIÓN DE USUARIOS DESDE EL ADMIN CON UPSERT
 async function crearFotografoDesdeAdmin(){
   hideErr('admin-reg-err');
   const name = document.getElementById('admin-ph-name').value.trim();
@@ -485,14 +486,20 @@ async function crearFotografoDesdeAdmin(){
         return;
     }
 
-    // CHIVATO DE ERROR
-    const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
+    // USO DE UPSERT PARA EVITAR EL BLOQUEO
+    const { error: insErr } = await sb.from('profiles').upsert({ id: uid, username: name, email: email, active: true });
     if(insErr) {
         alert("❌ ERROR DE SUPABASE AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
         return;
     }
 
     toast('¡Fotógrafo creado y activo! ✓');
+    
+    // Limpiamos las casillas para que no haya dobles clics
+    document.getElementById('admin-ph-name').value = '';
+    document.getElementById('admin-ph-email').value = '';
+    document.getElementById('admin-ph-pass').value = '';
+    
     renderAdminPanel();
   } catch(e) {
     showErr('admin-reg-err', e.message);
@@ -616,7 +623,6 @@ async function handleFiles(files){
       const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
       const d = await res.json();
       
-      // CHIVATO DE ERROR DE FOTO
       const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
       if(photoErr) {
           alert("❌ ERROR AL GUARDAR FOTO EN SUPABASE:\n" + JSON.stringify(photoErr));
@@ -646,7 +652,6 @@ async function createSession(){
   const desc=document.getElementById('session-desc').value.trim();
   if(!name) return;
   
-  // CHIVATO DE ERROR AL CREAR SESIÓN
   const {error: sessErr} = await sb.from('sessions').insert({photographer_id:currentUser.id, name, description:desc});
   if(sessErr) {
       alert("❌ ERROR DE SUPABASE AL CREAR SESIÓN:\n" + JSON.stringify(sessErr));
