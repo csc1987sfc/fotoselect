@@ -95,6 +95,7 @@ function sbFrom(table){
     limit(n){ s.lim=n; return b; },
     single(){ s.isSingle=true; return b; },
     async insert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data]); },
+    async upsert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data], 'on_conflict=id'); },
     async update(data){ return _restWrite('PATCH',s.table,data,fqs()); },
     async delete(){ return _restWrite('DELETE',s.table,undefined,fqs()); },
     then(res,rej){ return _restGet(s.table,qs(),{single:s.isSingle,head:s.isHead,count:s.countMode}).then(res,rej); }
@@ -178,7 +179,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 .dash-title em{font-style:italic;color:var(--gold)}
 .dash-sub{font-size:12px;color:var(--muted);letter-spacing:0.06em;margin-bottom:40px}
 
-/* NUEVA DISPOSICIÓN A DOS COLUMNAS PARA EL ADMIN */
+/* DISEÑO A DOS COLUMNAS */
 .admin-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; align-items: start; }
 @media (max-width: 800px) { .admin-cols { grid-template-columns: 1fr; } }
 
@@ -341,7 +342,7 @@ function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').f
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 
-// LOGIN 
+// LOGIN
 async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
@@ -352,7 +353,6 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
-    // Verificación de suspensión
     const {data:profile} = await sb.from('profiles').select('active').eq('id',data.user.id).single();
     if(profile && profile.active === false) {
       showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
@@ -373,7 +373,7 @@ async function handleLogin(){
   }
 }
 
-// REGISTRO INICIAL (Tú como Admin)
+// REGISTRO INICIAL
 async function handleRegister(){
   hideErr('reg-err');
   const code=document.getElementById('reg-code').value.trim();
@@ -388,18 +388,18 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  // Si Supabase ya lo creó en segundo plano, actualizamos el nombre. Si no, lo insertamos.
+  // CORRECCIÓN DEL ORDEN: Primero .eq y luego .update
   const {error: profErr} = await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
   if (profErr) {
       if(profErr.code === '23505' || profErr.message.includes('duplicate')) {
-          await sb.from('profiles').update({username:name, email:email, active:true}).eq('id', data.user.id);
+          await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
       } else {
           alert("❌ ERROR AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
           return;
       }
   }
 
-  await sb.from('invite_codes').update({used:true, used_by:data.user.id}).eq('id',codes[0].id);
+  await sb.from('invite_codes').eq('id',codes[0].id).update({used:true, used_by:data.user.id});
 
   currentUser = data.user;
   loadPhotographerDashboard();
@@ -407,7 +407,7 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL ADMIN GLOBAL (A DOS COLUMNAS)
+// PANEL ADMIN GLOBAL (DISEÑO DOS COLUMNAS)
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
@@ -494,11 +494,11 @@ async function crearFotografoDesdeAdmin(){
         return;
     }
 
-    // SI LA BASE DE DATOS YA LO HA CREADO, LO ACTUALIZAMOS
+    // CORRECCIÓN DEL ORDEN: Primero .eq y luego .update
     const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
     if(insErr) {
         if(insErr.code === '23505' || insErr.message.includes('duplicate')) {
-            await sb.from('profiles').update({username: name, email: email, active: true}).eq('id', uid);
+            await sb.from('profiles').eq('id', uid).update({username: name, email: email, active: true});
         } else {
             alert("❌ ERROR AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
             return;
@@ -526,7 +526,8 @@ async function toggleSuspensionFotografo(idFotografo, estadoActual){
     
   if(!confirm(advertencia)) return;
 
-  const { error } = await sb.from('profiles').update({ active: nuevoEstado }).eq('id', idFotografo);
+  // CORRECCIÓN DEL ORDEN
+  const { error } = await sb.from('profiles').eq('id', idFotografo).update({ active: nuevoEstado });
   if(error) { alert('Error al modificar estado: ' + JSON.stringify(error)); return; }
   
   toast(nuevoEstado ? 'Cuenta activada correctamente ✓' : 'Cuenta congelada por impago ⛔');
@@ -535,6 +536,7 @@ async function toggleSuspensionFotografo(idFotografo, estadoActual){
 
 async function borrarFotografoTotal(idFotografo){
   if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo y sus datos AL INSTANTE.")) return;
+  // CORRECCIÓN DEL ORDEN
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
   if(error) { alert('Error al eliminar fotógrafo: ' + JSON.stringify(error)); return; }
   toast('Fotógrafo borrado por completo ✓');
@@ -647,14 +649,16 @@ async function handleFiles(files){
 
 async function deleteSession(id, name){
   if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
-  const { error } = await sb.from('sessions').delete().eq('id', id);
+  // CORRECCIÓN DEL ORDEN
+  const { error } = await sb.from('sessions').eq('id', id).delete();
   if(error) { toast('Error al borrar sesión'); return; }
   toast('Sesión eliminada ✓');
   renderSessionsList();
 }
 
-async function deletePhoto(id){ await sb.from('photos').delete().eq('id',id); renderSessionDetail(); }
-async function deleteClient(id){ if(!confirm("¿Eliminar este cliente?")) return; await sb.from('clients').delete().eq('id',id); renderSessionDetail(); }
+// CORRECCIONES DE ORDEN
+async function deletePhoto(id){ await sb.from('photos').eq('id',id).delete(); renderSessionDetail(); }
+async function deleteClient(id){ if(!confirm("¿Eliminar este cliente?")) return; await sb.from('clients').eq('id',id).delete(); renderSessionDetail(); }
 function openNewSessionModal(){ document.getElementById('modal-session').classList.add('open'); }
 function openNewClientModal(){ document.getElementById('modal-client').classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
@@ -740,7 +744,8 @@ async function finalizarSeleccionCliente(){
       await sb.from('photos').in('id', idsDescartes).delete();
     }
 
-    await sb.from('clients').update({ selection_done: true, selection_done_at: new Date().toISOString() }).eq('id', currentClientRow.id);
+    // CORRECCIÓN DEL ORDEN
+    await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
     
     currentClientRow.selection_done = true;
     alert('¡Selección enviada con éxito! La galería ha sido optimizada.');
@@ -754,6 +759,7 @@ async function finalizarSeleccionCliente(){
 
 async function toggleFav(photoId){
   const {data:favs} = await sb.from('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
+  // CORRECCIÓN DEL ORDEN
   if(favs && favs.length > 0){ await sb.from('favorites').eq('id',favs[0].id).delete(); } 
   else { await sb.from('favorites').insert({client_id:currentClientRow.id, photo_id:photoId}); }
   renderClientGallery();
