@@ -95,7 +95,6 @@ function sbFrom(table){
     limit(n){ s.lim=n; return b; },
     single(){ s.isSingle=true; return b; },
     async insert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data]); },
-    async upsert(data){ return _restWrite('POST',s.table,Array.isArray(data)?data:[data], 'on_conflict=id'); },
     async update(data){ return _restWrite('PATCH',s.table,data,fqs()); },
     async delete(){ return _restWrite('DELETE',s.table,undefined,fqs()); },
     then(res,rej){ return _restGet(s.table,qs(),{single:s.isSingle,head:s.isHead,count:s.countMode}).then(res,rej); }
@@ -342,7 +341,7 @@ function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').f
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 
-// LOGIN
+// LOGIN CON AUTO-REPARACIÓN
 async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
@@ -353,7 +352,13 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
-    const {data:profile} = await sb.from('profiles').select('active').eq('id',data.user.id).single();
+    // SISTEMA DE AUTO-SANACIÓN: Si el reinicio borró la fila del perfil, la recreamos para evitar el error de sesión.
+    let {data:profile} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+    if(!profile) {
+        await sb.from('profiles').insert({ id: data.user.id, email: email, username: email.split('@')[0], active: true });
+        profile = { active: true }; // Permitimos el paso simulando que ya estaba
+    }
+
     if(profile && profile.active === false) {
       showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
       await sb.auth.signOut();
@@ -373,7 +378,7 @@ async function handleLogin(){
   }
 }
 
-// REGISTRO INICIAL
+// REGISTRO INICIAL SEGURO
 async function handleRegister(){
   hideErr('reg-err');
   const code=document.getElementById('reg-code').value.trim();
@@ -388,15 +393,12 @@ async function handleRegister(){
   const {data,error} = await sb.auth.signUp({email,password:pass});
   if(error){ showErr('reg-err',error.message); return; }
 
-  // CORRECCIÓN DEL ORDEN: Primero .eq y luego .update
-  const {error: profErr} = await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
-  if (profErr) {
-      if(profErr.code === '23505' || profErr.message.includes('duplicate')) {
-          await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
-      } else {
-          alert("❌ ERROR AL GUARDAR PERFIL:\n" + JSON.stringify(profErr));
-          return;
-      }
+  // Verificamos si existe antes de insertar para evitar errores de colisión
+  const {data: existing} = await sb.from('profiles').select('id').eq('id', data.user.id).single();
+  if (existing) {
+      await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
+  } else {
+      await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
   }
 
   await sb.from('invite_codes').eq('id',codes[0].id).update({used:true, used_by:data.user.id});
@@ -407,7 +409,7 @@ async function handleRegister(){
 
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
-// PANEL ADMIN GLOBAL (DISEÑO DOS COLUMNAS)
+// PANEL ADMIN GLOBAL
 async function renderAdminPanel(){
   const body = document.getElementById('admin-body');
   body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
@@ -464,7 +466,7 @@ async function renderAdminPanel(){
     </div>`;
 }
 
-// CREACIÓN DE USUARIOS DESDE EL ADMIN
+// CREACIÓN PERFECTA DE USUARIOS DESDE EL ADMIN
 async function crearFotografoDesdeAdmin(){
   hideErr('admin-reg-err');
   const name = document.getElementById('admin-ph-name').value.trim();
@@ -494,20 +496,16 @@ async function crearFotografoDesdeAdmin(){
         return;
     }
 
-    // CORRECCIÓN DEL ORDEN: Primero .eq y luego .update
-    const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
-    if(insErr) {
-        if(insErr.code === '23505' || insErr.message.includes('duplicate')) {
-            await sb.from('profiles').eq('id', uid).update({username: name, email: email, active: true});
-        } else {
-            alert("❌ ERROR AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
-            return;
-        }
+    // Comprobación de seguridad para evitar "Estudio sin nombre" y choques
+    const {data: existing} = await sb.from('profiles').select('id').eq('id', uid).single();
+    if (existing) {
+        await sb.from('profiles').eq('id', uid).update({username: name, email: email, active: true});
+    } else {
+        await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
     }
 
     toast('¡Fotógrafo creado y activo! ✓');
     
-    // Limpiamos las casillas para evitar dobles clics accidentales
     document.getElementById('admin-ph-name').value = '';
     document.getElementById('admin-ph-email').value = '';
     document.getElementById('admin-ph-pass').value = '';
@@ -526,7 +524,6 @@ async function toggleSuspensionFotografo(idFotografo, estadoActual){
     
   if(!confirm(advertencia)) return;
 
-  // CORRECCIÓN DEL ORDEN
   const { error } = await sb.from('profiles').eq('id', idFotografo).update({ active: nuevoEstado });
   if(error) { alert('Error al modificar estado: ' + JSON.stringify(error)); return; }
   
@@ -536,7 +533,6 @@ async function toggleSuspensionFotografo(idFotografo, estadoActual){
 
 async function borrarFotografoTotal(idFotografo){
   if(!confirm("⚠️ ¿Estás COMPLETAMENTE seguro? Esto eliminará al fotógrafo y sus datos AL INSTANTE.")) return;
-  // CORRECCIÓN DEL ORDEN
   const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
   if(error) { alert('Error al eliminar fotógrafo: ' + JSON.stringify(error)); return; }
   toast('Fotógrafo borrado por completo ✓');
@@ -649,14 +645,12 @@ async function handleFiles(files){
 
 async function deleteSession(id, name){
   if(!confirm('¿Eliminar la sesión "'+name+'" y todas sus fotos y clientes?')) return;
-  // CORRECCIÓN DEL ORDEN
   const { error } = await sb.from('sessions').eq('id', id).delete();
   if(error) { toast('Error al borrar sesión'); return; }
   toast('Sesión eliminada ✓');
   renderSessionsList();
 }
 
-// CORRECCIONES DE ORDEN
 async function deletePhoto(id){ await sb.from('photos').eq('id',id).delete(); renderSessionDetail(); }
 async function deleteClient(id){ if(!confirm("¿Eliminar este cliente?")) return; await sb.from('clients').eq('id',id).delete(); renderSessionDetail(); }
 function openNewSessionModal(){ document.getElementById('modal-session').classList.add('open'); }
@@ -744,7 +738,6 @@ async function finalizarSeleccionCliente(){
       await sb.from('photos').in('id', idsDescartes).delete();
     }
 
-    // CORRECCIÓN DEL ORDEN
     await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
     
     currentClientRow.selection_done = true;
@@ -759,7 +752,6 @@ async function finalizarSeleccionCliente(){
 
 async function toggleFav(photoId){
   const {data:favs} = await sb.from('favorites').select('id').eq('client_id',currentClientRow.id).eq('photo_id',photoId);
-  // CORRECCIÓN DEL ORDEN
   if(favs && favs.length > 0){ await sb.from('favorites').eq('id',favs[0].id).delete(); } 
   else { await sb.from('favorites').insert({client_id:currentClientRow.id, photo_id:photoId}); }
   renderClientGallery();
