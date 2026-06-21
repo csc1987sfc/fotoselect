@@ -397,7 +397,6 @@ async function handleLogin(){
     
     let {data:profile} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
     
-    // Si la ficha no existe, significa que el Admin lo ha borrado (y el usuario sigue en Auth). No le dejamos pasar.
     if(!profile) {
         showErr('login-err','⛔ Tu cuenta ha sido eliminada de la plataforma.');
         await sb.auth.signOut();
@@ -671,14 +670,52 @@ async function handleFiles(files){
   renderSessionDetail();
 }
 
+// 💥 FUNCIÓN MEJORADA: BORRAR SESIÓN (VACÍA CLOUDINARY PRIMERO)
 async function deleteSession(id, name){
-  if(!confirm('¿Eliminar la sesión por completo?')) return;
-  const { error } = await sb.from('sessions').eq('id', id).delete();
-  if(error) { toast('Error'); return; }
-  renderSessionsList();
+  if(!confirm(`⚠️ ¿Eliminar la sesión "${name}" por completo? Esto borrará TODAS las fotos de esta sesión en la nube para liberar espacio. ¿Confirmas?`)) return;
+
+  const body = document.getElementById('ph-body');
+  const htmlOriginal = body.innerHTML;
+  body.innerHTML = '<div class="loading">Eliminando fotos en la nube y borrando sesión...</div>';
+
+  try {
+    // 1. Buscar todas las fotos que tiene esta sesión
+    const {data: fotos} = await sb.from('photos').select('url').eq('session_id', id);
+
+    // 2. Mandar la orden a Cloudinary para borrarlas todas
+    if (fotos && fotos.length > 0) {
+      for(let foto of fotos) {
+        if(foto.url) {
+          let public_id = "";
+          let urlParts = foto.url.split('/upload/');
+          if(urlParts.length > 1) {
+            let parts = urlParts[1].split('/');
+            if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
+            public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
+          }
+          if(public_id) {
+            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ public_id: public_id })
+            }).catch(e=>{});
+          }
+        }
+      }
+    }
+
+    // 3. Borrar la sesión de la base de datos
+    const { error } = await sb.from('sessions').eq('id', id).delete();
+    if(error) { toast('Error al borrar'); body.innerHTML = htmlOriginal; return; }
+
+    renderSessionsList();
+    toast('¡Sesión y fotos eliminadas con éxito!');
+  } catch (e) {
+    alert('Ocurrió un error inesperado.');
+    body.innerHTML = htmlOriginal;
+  }
 }
 
-// 💥 NUEVA FUNCIÓN DE BORRADO (SUPABASE + CLOUDINARY)
 async function deletePhoto(id){ 
   if(!confirm("¿Eliminar esta foto por completo (de la galería y de Cloudinary)?")) return;
   toast('Eliminando foto...');
@@ -768,7 +805,6 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
-// 💥 NUEVA FUNCIÓN DE FINALIZAR SELECCIÓN (BORRA DESCARTES EN CLOUDINARY)
 async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
@@ -783,7 +819,6 @@ async function finalizarSeleccionCliente(){
     const descartes = (todasLasFotos||[]).filter(p => !idsFavoritos.includes(p.id));
 
     if (descartes.length > 0) { 
-      // Borrar de Cloudinary en segundo plano
       for(let foto of descartes) {
         if(foto.url) {
           let public_id = "";
@@ -802,7 +837,6 @@ async function finalizarSeleccionCliente(){
           }
         }
       }
-      // Borrar de Supabase
       const idsDescartes = descartes.map(d => d.id);
       await sb.from('photos').in('id', idsDescartes).delete(); 
     }
