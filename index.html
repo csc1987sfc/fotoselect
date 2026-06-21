@@ -678,7 +678,32 @@ async function deleteSession(id, name){
   renderSessionsList();
 }
 
-async function deletePhoto(id){ await sb.from('photos').eq('id',id).delete(); renderSessionDetail(); }
+// 💥 NUEVA FUNCIÓN DE BORRADO (SUPABASE + CLOUDINARY)
+async function deletePhoto(id){ 
+  if(!confirm("¿Eliminar esta foto por completo (de la galería y de Cloudinary)?")) return;
+  toast('Eliminando foto...');
+  
+  const { data: foto } = await sb.from('photos').select('url').eq('id', id).single();
+  if (foto && foto.url) {
+    let public_id = "";
+    const urlParts = foto.url.split('/upload/');
+    if(urlParts.length > 1) {
+      let parts = urlParts[1].split('/');
+      if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
+      public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
+    }
+    if(public_id) {
+      await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_id: public_id })
+      }).catch(e=>{});
+    }
+  }
+  await sb.from('photos').eq('id',id).delete(); 
+  renderSessionDetail(); 
+}
+
 async function deleteClient(id){ if(!confirm("¿Eliminar cliente?")) return; await sb.from('clients').eq('id',id).delete(); renderSessionDetail(); }
 function openNewSessionModal(){ document.getElementById('modal-session').classList.add('open'); }
 function openNewClientModal(){ document.getElementById('modal-client').classList.add('open'); }
@@ -743,24 +768,48 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
+// 💥 NUEVA FUNCIÓN DE FINALIZAR SELECCIÓN (BORRA DESCARTES EN CLOUDINARY)
 async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía antes de finalizar."); return; }
-  if(!confirm(`Vas a guardar ${idsFavoritos.length} fotos favoritas. Las descartadas se eliminarán para liberar espacio. ¿Confirmas?`)) return;
+  if(!confirm(`Vas a guardar ${idsFavoritos.length} fotos favoritas. Las descartadas se eliminarán para liberar espacio en la nube. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
-  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección…'; }
+  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección y borrando descartes…'; }
 
   try {
-    const {data: todasLasFotos} = await sb.from('photos').select('id').eq('session_id', currentClientRow.session_id);
-    const idsDescartes = (todasLasFotos||[]).map(p => p.id).filter(id => !idsFavoritos.includes(id));
+    const {data: todasLasFotos} = await sb.from('photos').select('id, url').eq('session_id', currentClientRow.session_id);
+    const descartes = (todasLasFotos||[]).filter(p => !idsFavoritos.includes(p.id));
 
-    if (idsDescartes.length > 0) { await sb.from('photos').in('id', idsDescartes).delete(); }
+    if (descartes.length > 0) { 
+      // Borrar de Cloudinary en segundo plano
+      for(let foto of descartes) {
+        if(foto.url) {
+          let public_id = "";
+          let urlParts = foto.url.split('/upload/');
+          if(urlParts.length > 1) {
+            let parts = urlParts[1].split('/');
+            if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
+            public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
+          }
+          if(public_id) {
+            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ public_id: public_id })
+            }).catch(e=>{});
+          }
+        }
+      }
+      // Borrar de Supabase
+      const idsDescartes = descartes.map(d => d.id);
+      await sb.from('photos').in('id', idsDescartes).delete(); 
+    }
     await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
     
     currentClientRow.selection_done = true;
-    alert('¡Selección completada! Tu fotógrafo ha sido avisado.');
+    alert('¡Selección completada! Tu fotógrafo ha sido avisado y el espacio se ha liberado.');
     renderClientGallery();
   } catch(e) {
     alert('Ocurrió un imprevisto. Revisa tu conexión.');
