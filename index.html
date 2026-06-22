@@ -355,6 +355,12 @@ function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; document.getElementById('lightbox').classList.add('open'); }
 
+// 💥 NUEVA FUNCIÓN: INYECTOR DE OPTIMIZACIÓN CLOUDINARY
+function optUrl(url, opts){
+  if(!url || !url.includes('/upload/')) return url;
+  return url.replace('/upload/', '/upload/'+opts+'/');
+}
+
 function optimizarYComprimir(file) {
   return new Promise((resolve) => {
     if (!file.type.startsWith('image/')) { resolve(file); return; }
@@ -628,9 +634,13 @@ async function renderSessionDetail(){
     <div class="upload-zone" style="margin-top:15px"><input type="file" multiple onchange="handleFiles(this.files)"/>Arrastra o pincha aquí para subir fotos</div>
     <div class="photo-grid">`;
     
+  // 💥 AQUÍ SE APLICA LA OPTIMIZACIÓN Y EL LAZY LOADING PARA EL FOTÓGRAFO
   (photos||[]).forEach(p=>{
-    html += `<div class="photo-item"><img src="${p.url}" onclick="openLightbox('${p.url}')"/><button class="del-btn" onclick="deletePhoto('${p.id}')">×</button></div>`;
+    const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
+    const full = optUrl(p.url, 'q_auto,f_auto');
+    html += `<div class="photo-item"><img src="${thumb}" loading="lazy" onclick="openLightbox('${full}')"/><button class="del-btn" onclick="deletePhoto('${p.id}')">×</button></div>`;
   });
+
   html += `</div><h3 style="margin-top:40px; font-family:'Playfair Display',serif; font-style:italic;">Clientes asignados</h3><table class="clients-table">
     <thead><tr><th>Nombre</th><th>Email</th><th>Contraseña</th><th>Estado</th><th>Acción</th></tr></thead><tbody>`;
     
@@ -670,7 +680,6 @@ async function handleFiles(files){
   renderSessionDetail();
 }
 
-// 💥 FUNCIÓN MEJORADA: BORRAR SESIÓN (VACÍA CLOUDINARY PRIMERO)
 async function deleteSession(id, name){
   if(!confirm(`⚠️ ¿Eliminar la sesión "${name}" por completo? Esto borrará TODAS las fotos de esta sesión en la nube para liberar espacio. ¿Confirmas?`)) return;
 
@@ -679,10 +688,8 @@ async function deleteSession(id, name){
   body.innerHTML = '<div class="loading">Eliminando fotos en la nube y borrando sesión...</div>';
 
   try {
-    // 1. Buscar todas las fotos que tiene esta sesión
     const {data: fotos} = await sb.from('photos').select('url').eq('session_id', id);
 
-    // 2. Mandar la orden a Cloudinary para borrarlas todas
     if (fotos && fotos.length > 0) {
       for(let foto of fotos) {
         if(foto.url) {
@@ -704,7 +711,6 @@ async function deleteSession(id, name){
       }
     }
 
-    // 3. Borrar la sesión de la base de datos
     const { error } = await sb.from('sessions').eq('id', id).delete();
     if(error) { toast('Error al borrar'); body.innerHTML = htmlOriginal; return; }
 
@@ -794,10 +800,14 @@ async function renderClientGallery(){
       }
     </div><div class="client-grid">`;
 
+  // 💥 AQUÍ SE APLICA LA OPTIMIZACIÓN Y EL LAZY LOADING PARA EL CLIENTE
   for(const p of (photos||[])){
     const isFav = favSet.has(p.id);
+    const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
+    const full = optUrl(p.url, 'q_auto,f_auto');
+    
     html += `<div class="client-photo ${isFav?'favorited':''}">
-      <img src="${p.url}" onclick="openLightbox('${p.url}')"/>
+      <img src="${thumb}" loading="lazy" onclick="openLightbox('${full}')"/>
       ${terminado ? '' : `<div class="heart" onclick="toggleFav('${p.id}')">${isFav?'❤️':'🤍'}</div>`}
     </div>`;
   }
