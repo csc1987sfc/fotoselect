@@ -121,6 +121,18 @@ const sb = { auth: sbAuth, from: sbFrom };
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-weight:300;min-height:100vh}
 
+/* 💥 ESCUDO ANTIRROBO CSS 💥 */
+img {
+  -webkit-user-drag: none; /* Bloquea el arrastre en PC */
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-touch-callout: none; /* Bloquea menú al dejar pulsado en móvil */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .screen{display:none;min-height:100vh}
 .screen.active{display:flex;flex-direction:column}
 
@@ -235,7 +247,8 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
 
 .lightbox-modal { position: fixed; inset: 0; background: rgba(10,9,8,0.96); display: none; align-items: center; justify-content: center; z-index: 200; cursor: zoom-out; backdrop-filter: blur(8px); }
 .lightbox-modal.open { display: flex; }
-.lightbox-modal img { max-width: 95%; max-height: 92%; object-fit: contain; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+/* 💥 CAPA INVISIBLE (POINTER EVENTS NONE) 💥 */
+.lightbox-modal img { max-width: 95%; max-height: 92%; object-fit: contain; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.5); pointer-events: none; }
 
 .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .ph-item{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);font-size:13px}
@@ -355,7 +368,14 @@ function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; document.getElementById('lightbox').classList.add('open'); }
 
-// 💥 NUEVA FUNCIÓN: INYECTOR DE OPTIMIZACIÓN CLOUDINARY
+// 💥 ESCUDO ANTIRROBO JAVASCRIPT (BLOQUEA CLIC DERECHO) 💥
+document.addEventListener('contextmenu', e => {
+  if(e.target.tagName === 'IMG' || e.target.id === 'lightbox') {
+    e.preventDefault();
+    toast('🛡️ Imagen protegida. Descarga no permitida.');
+  }
+});
+
 function optUrl(url, opts){
   if(!url || !url.includes('/upload/')) return url;
   return url.replace('/upload/', '/upload/'+opts+'/');
@@ -634,7 +654,6 @@ async function renderSessionDetail(){
     <div class="upload-zone" style="margin-top:15px"><input type="file" multiple onchange="handleFiles(this.files)"/>Arrastra o pincha aquí para subir fotos</div>
     <div class="photo-grid">`;
     
-  // 💥 AQUÍ SE APLICA LA OPTIMIZACIÓN Y EL LAZY LOADING PARA EL FOTÓGRAFO
   (photos||[]).forEach(p=>{
     const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
     const full = optUrl(p.url, 'q_auto,f_auto');
@@ -800,7 +819,6 @@ async function renderClientGallery(){
       }
     </div><div class="client-grid">`;
 
-  // 💥 AQUÍ SE APLICA LA OPTIMIZACIÓN Y EL LAZY LOADING PARA EL CLIENTE
   for(const p of (photos||[])){
     const isFav = favSet.has(p.id);
     const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
