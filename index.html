@@ -121,14 +121,13 @@ const sb = { auth: sbAuth, from: sbFrom };
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-weight:300;min-height:100vh}
 
-/* 💥 ESCUDO ANTIRROBO CSS 💥 */
 img {
-  -webkit-user-drag: none; /* Bloquea el arrastre en PC */
+  -webkit-user-drag: none;
   -khtml-user-drag: none;
   -moz-user-drag: none;
   -o-user-drag: none;
   user-drag: none;
-  -webkit-touch-callout: none; /* Bloquea menú al dejar pulsado en móvil */
+  -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -247,7 +246,6 @@ img {
 
 .lightbox-modal { position: fixed; inset: 0; background: rgba(10,9,8,0.96); display: none; align-items: center; justify-content: center; z-index: 200; cursor: zoom-out; backdrop-filter: blur(8px); }
 .lightbox-modal.open { display: flex; }
-/* 💥 CAPA INVISIBLE (POINTER EVENTS NONE) 💥 */
 .lightbox-modal img { max-width: 95%; max-height: 92%; object-fit: contain; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.5); pointer-events: none; }
 
 .admin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
@@ -368,7 +366,6 @@ function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; document.getElementById('lightbox').classList.add('open'); }
 
-// 💥 ESCUDO ANTIRROBO JAVASCRIPT (BLOQUEA CLIC DERECHO) 💥
 document.addEventListener('contextmenu', e => {
   if(e.target.tagName === 'IMG' || e.target.id === 'lightbox') {
     e.preventDefault();
@@ -699,6 +696,7 @@ async function handleFiles(files){
   renderSessionDetail();
 }
 
+// 💥 AÑADIDO 'AWAIT' DE SEGURIDAD PARA EL BORRADO 💥
 async function deleteSession(id, name){
   if(!confirm(`⚠️ ¿Eliminar la sesión "${name}" por completo? Esto borrará TODAS las fotos de esta sesión en la nube para liberar espacio. ¿Confirmas?`)) return;
 
@@ -720,11 +718,14 @@ async function deleteSession(id, name){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ public_id: public_id })
-            }).catch(e=>{});
+            try {
+              // El 'await' obliga a esperar confirmación antes de seguir
+              await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ public_id: public_id })
+              });
+            } catch(e) {}
           }
         }
       }
@@ -741,6 +742,7 @@ async function deleteSession(id, name){
   }
 }
 
+// 💥 AÑADIDO 'AWAIT' DE SEGURIDAD 💥
 async function deletePhoto(id){ 
   if(!confirm("¿Eliminar esta foto por completo (de la galería y de Cloudinary)?")) return;
   toast('Eliminando foto...');
@@ -755,11 +757,13 @@ async function deletePhoto(id){
       public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
     }
     if(public_id) {
-      await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_id: public_id })
-      }).catch(e=>{});
+      try {
+        await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_id: public_id })
+        });
+      } catch(e) {}
     }
   }
   await sb.from('photos').eq('id',id).delete(); 
@@ -833,6 +837,7 @@ async function renderClientGallery(){
   body.innerHTML = html;
 }
 
+// 💥 AÑADIDO 'AWAIT' DE SEGURIDAD PARA FINALIZAR SELECCIÓN 💥
 async function finalizarSeleccionCliente(){
   const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
   const idsFavoritos = (favs||[]).map(f => f.photo_id);
@@ -857,11 +862,14 @@ async function finalizarSeleccionCliente(){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ public_id: public_id })
-            }).catch(e=>{});
+            try {
+              // El 'await' es la clave de todo
+              await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ public_id: public_id })
+              });
+            } catch(e) {}
           }
         }
       }
