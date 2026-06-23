@@ -19,7 +19,6 @@ function _token(){ return _loadSession()?.access_token||SKEY; }
 
 function _headers(extra={}){ return {'apikey':SKEY,'Authorization':`Bearer ${_token()}`,'Content-Type':'application/json',...extra}; }
 
-// 💥 CORREGIDO: Anti-caché estricto pero sin romper las consultas de Supabase
 async function _restGet(table, qs='', opts={}){
   const h = _headers(opts.count?{'Prefer':'count=exact'}:{});
   if(opts.single) h['Accept']='application/vnd.pgrst.object+json';
@@ -27,7 +26,7 @@ async function _restGet(table, qs='', opts={}){
     const r = await fetch(`${SURL}/rest/v1/${table}?${qs}`,{
       method:opts.head?'HEAD':'GET',
       headers:h,
-      cache: 'no-store' // Evita la caché sin enviar parámetros fantasma a la base de datos
+      cache: 'no-store' 
     });
     if(opts.head||opts.count){ const cr=r.headers.get('content-range'); return {data:null,count:cr?parseInt(cr.split('/')[1]||'0'):0,error:null}; }
     const d = await r.json();
@@ -803,6 +802,7 @@ async function createClient(){
 
 async function loadClientView(){ showScreen('client'); renderClientGallery(); }
 
+// 💥 AQUÍ ESTÁ LA SOLUCIÓN DEL LÍMITE CON EL "TRUCO DEL ASTERISCO"
 async function renderClientGallery(){
   const body = document.getElementById('cl-body');
   body.innerHTML = '<div class="loading">Abriendo tu álbum privado…</div>';
@@ -813,21 +813,23 @@ async function renderClientGallery(){
   }
 
   try {
-    const resClient = await sb.from('clients').select('*').eq('id', currentClientRow.id).single();
-    if(resClient && resClient.data) { currentClientRow = resClient.data; }
+    const resClient = await sb.from('clients').select('*').eq('id', currentClientRow.id);
+    if(resClient && resClient.data && resClient.data.length > 0) { currentClientRow = resClient.data[0]; }
   } catch(e) { console.error(e); }
 
   const [resPhotos, resFavs, resSession] = await Promise.all([
     sb.from('photos').select('*').eq('session_id', currentClientRow.session_id).order('created_at', {ascending:false}),
     sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id),
-    sb.from('sessions').select('max_selections').eq('id', currentClientRow.session_id).single()
+    sb.from('sessions').select('*').eq('id', currentClientRow.session_id) // <- El asterisco puentea el error de la caché
   ]);
 
   const photos = resPhotos?.data || [];
   const favs = resFavs?.data || [];
-  const sessData = resSession?.data || null;
+  const sessData = resSession?.data?.[0] || null; // <- Evitamos usar .single() por si acaso
 
-  currentMaxSelections = sessData?.max_selections || null;
+  // Nos aseguramos de convertirlo a número puro
+  currentMaxSelections = sessData?.max_selections ? parseInt(sessData.max_selections) : null;
+  
   const favSet = new Set(favs.map(f => f.photo_id));
   const terminado = currentClientRow.selection_done;
   
