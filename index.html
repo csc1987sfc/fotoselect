@@ -19,19 +19,15 @@ function _token(){ return _loadSession()?.access_token||SKEY; }
 
 function _headers(extra={}){ return {'apikey':SKEY,'Authorization':`Bearer ${_token()}`,'Content-Type':'application/json',...extra}; }
 
-// 💥 AQUÍ ESTÁ LA MAGIA ANTICACHÉ
+// 💥 CORREGIDO: Anti-caché estricto pero sin romper las consultas de Supabase
 async function _restGet(table, qs='', opts={}){
   const h = _headers(opts.count?{'Prefer':'count=exact'}:{});
   if(opts.single) h['Accept']='application/vnd.pgrst.object+json';
   try{
-    // Generamos un sello de tiempo único para engañar al navegador y que NUNCA use la caché
-    const ts = `_nocache=${new Date().getTime()}`;
-    const finalQs = qs ? `${qs}&${ts}` : ts;
-
-    const r = await fetch(`${SURL}/rest/v1/${table}?${finalQs}`,{
+    const r = await fetch(`${SURL}/rest/v1/${table}?${qs}`,{
       method:opts.head?'HEAD':'GET',
       headers:h,
-      cache: 'no-store' // Orden estricta de no cachear
+      cache: 'no-store' // Evita la caché sin enviar parámetros fantasma a la base de datos
     });
     if(opts.head||opts.count){ const cr=r.headers.get('content-range'); return {data:null,count:cr?parseInt(cr.split('/')[1]||'0'):0,error:null}; }
     const d = await r.json();
@@ -670,9 +666,8 @@ async function renderSessionDetail(){
   body.innerHTML = html;
 }
 
-// 💥 SUBIDA DE FOTOS MEJORADA A PRUEBA DE FALLOS
 async function handleFiles(inputFiles){
-  const files = Array.from(inputFiles); // Aseguramos leer todos los archivos correctamente
+  const files = Array.from(inputFiles);
   toast(`Optimizando y subiendo ${files.length} imágenes...`);
   
   const nombreCarpeta = currentSession.name.replace(/[^a-zA-Z0-9]/g, '_');
