@@ -678,12 +678,19 @@ async function renderSessionDetail(){
 
 async function handleFiles(files){
   toast('Optimizando y subiendo imágenes...');
+  
+  // 💥 NUEVO: Creamos un nombre de carpeta limpio usando el nombre de la sesión
+  const nombreCarpeta = currentSession.name.replace(/[^a-zA-Z0-9]/g, '_');
+
   for(const f of files){
     try {
       const blobOptimizado = await optimizarYComprimir(f);
       const fd = new FormData(); 
       fd.append('file', blobOptimizado, f.name.replace(/\.[^/.]+$/, "") + ".jpg"); 
       fd.append('upload_preset', 'fotoselect');
+      
+      // 💥 NUEVO: Le damos la orden a Cloudinary de guardarlo en esa carpeta
+      fd.append('folder', `FotoSelect/${nombreCarpeta}`);
       
       const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
       const d = await res.json();
