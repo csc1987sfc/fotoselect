@@ -319,7 +319,6 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
     <h3>Nueva sesión</h3>
     <div class="field"><label>Nombre de la sesión</label><input type="text" id="session-name"/></div>
     <div class="field"><label>Descripción</label><input type="text" id="session-desc"/></div>
-    <!-- 💥 CASILLA DE LÍMITE DE FOTOS AÑADIDA AQUÍ -->
     <div class="field"><label>Límite de fotos (Opcional)</label><input type="number" id="session-limit" placeholder="Ej: 15 (Dejar vacío para ilimitadas)" min="1"/></div>
     <button class="btn-primary" onclick="createSession()">Crear sesión</button>
   </div>
@@ -347,7 +346,7 @@ let currentUser = null;
 let currentRole = 'photographer'; 
 let currentSession = null; 
 let currentClientRow = null; 
-let currentMaxSelections = null; // 💥 NUEVA VARIABLE GLOBAL PARA GUARDAR EL LÍMITE
+let currentMaxSelections = null; 
 let toastT;
 
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
@@ -406,10 +405,10 @@ async function handleLogin(){
     let {data:profile} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
     
     if(!profile) {
-        showErr('login-err','⛔ Tu cuenta ha sido eliminada de la plataforma.');
-        await sb.auth.signOut();
-        currentUser = null;
-        return;
+      showErr('login-err','⛔ Tu cuenta ha sido eliminada de la plataforma.');
+      await sb.auth.signOut();
+      currentUser = null;
+      return;
     }
 
     if(profile && profile.active === false) {
@@ -447,9 +446,9 @@ async function handleRegister(){
 
   const {data: existing} = await sb.from('profiles').select('id').eq('id', data.user.id).single();
   if (existing) {
-      await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
+    await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
   } else {
-      await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
+    await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
   }
 
   await sb.from('invite_codes').eq('id',codes[0].id).update({used:true, used_by:data.user.id});
@@ -544,18 +543,18 @@ async function crearFotografoDesdeAdmin(){
 
     const uid = dAuth.id || dAuth.user?.id;
     if(!uid) { 
-        showErr('admin-reg-err', 'Este email ya está registrado oculto en Supabase (Authentication). Usa uno nuevo o bórralo de allí.'); 
-        return; 
+      showErr('admin-reg-err', 'Este email ya está registrado oculto en Supabase (Authentication). Usa uno nuevo o bórralo de allí.'); 
+      return; 
     }
 
     const { error: insErr } = await sb.from('profiles').insert({ id: uid, username: name, email: email, active: true });
     if(insErr) {
-        if(insErr.code === '23505' || insErr.message.includes('duplicate')) {
-            await sb.from('profiles').eq('id', uid).update({username: name, email: email, active: true});
-        } else {
-            alert("❌ ERROR AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
-            return;
-        }
+      if(insErr.code === '23505' || insErr.message.includes('duplicate')) {
+        await sb.from('profiles').eq('id', uid).update({username: name, email: email, active: true});
+      } else {
+        alert("❌ ERROR AL CREAR PERFIL (ADMIN):\n" + JSON.stringify(insErr));
+        return;
+      }
     }
 
     toast('¡Fotógrafo creado y activo! ✓');
@@ -599,7 +598,6 @@ async function renderSessionsList(){
 
   let html = `<h2 class="dash-title">Tu <em>estudio</em></h2><p class="dash-sub">Gestiona sesiones</p><div class="sessions-grid">`;
   (sessions||[]).forEach(s=>{
-    // 💥 AÑADIDO: Muestra en la tarjeta del fotógrafo si esa sesión tiene límite.
     let badgeLimite = s.max_selections ? `<span style="font-size:10px; background:rgba(201,169,110,0.15); color:var(--gold); padding:2px 6px; border-radius:2px; margin-left:8px;">Límite: ${s.max_selections}</span>` : '';
     html += `<div class="session-card" onclick="openSession('${s.id}','${escHtml(s.name)}')">
       <div class="card-del" onclick="event.stopPropagation(); deleteSession('${s.id}','${escHtml(s.name)}')">🗑️</div>
@@ -758,7 +756,6 @@ async function deletePhoto(id){
 async function deleteClient(id){ if(!confirm("¿Eliminar cliente?")) return; await sb.from('clients').eq('id',id).delete(); renderSessionDetail(); }
 
 function openNewSessionModal(){ 
-  // Limpiamos las casillas al abrir la ventana
   document.getElementById('session-name').value = '';
   document.getElementById('session-desc').value = '';
   document.getElementById('session-limit').value = '';
@@ -768,19 +765,16 @@ function openNewSessionModal(){
 function openNewClientModal(){ document.getElementById('modal-client').classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
-// 💥 MODIFICADO: Ahora lee el límite y lo manda a Supabase
 async function createSession(){
   const name=document.getElementById('session-name').value.trim();
   const desc=document.getElementById('session-desc').value.trim();
   const limitVal=document.getElementById('session-limit').value;
   
-  // Si escribe un número, lo guardamos. Si lo deja vacío, mandamos un "null" (sin límite)
   const max_selections = limitVal ? parseInt(limitVal) : null;
   
   if(!name) return;
   
   const {error: sessErr} = await sb.from('sessions').insert({photographer_id:currentUser.id, name, description:desc, max_selections});
-  
   if(sessErr) { alert("❌ ERROR AL CREAR SESIÓN:\n" + JSON.stringify(sessErr)); return; }
   
   closeModal('modal-session');
@@ -799,54 +793,81 @@ async function createClient(){
 
 async function loadClientView(){ showScreen('client'); renderClientGallery(); }
 
+// 💥 VISTA DEL CLIENTE ULTRA-ROBUSTA (CON ESCUDO ANTICRASH)
 async function renderClientGallery(){
   const body = document.getElementById('cl-body');
   body.innerHTML = '<div class="loading">Abriendo tu álbum privado…</div>';
-  const {data:clRefresh} = await sb.from('clients').select('*').eq('id',currentClientRow.id).single();
-  if(clRefresh) currentClientRow = clRefresh;
+  
+  if (!currentClientRow) {
+    body.innerHTML = '<div class="loading">Error: No se han encontrado datos del cliente. Por favor, entra otra vez.</div>';
+    return;
+  }
 
-  // 💥 MODIFICADO: Ahora también le pedimos a Supabase que nos diga si la sesión tiene límite
-  const [{data:photos},{data:favs},{data:sessData}] = await Promise.all([
-    sb.from('photos').select('*').eq('session_id',currentClientRow.session_id).order('created_at',{ascending:false}),
-    sb.from('favorites').select('photo_id').eq('client_id',currentClientRow.id),
-    sb.from('sessions').select('max_selections').eq('id',currentClientRow.session_id).single()
+  // Refrescar datos del cliente de forma individual y segura
+  try {
+    const resClient = await sb.from('clients').select('*').eq('id', currentClientRow.id).single();
+    if(resClient && resClient.data) { currentClientRow = resClient.data; }
+  } catch(e) { console.error(e); }
+
+  // Lanzamiento de consultas en paralelo tolerante a fallos individuales
+  const [resPhotos, resFavs, resSession] = await Promise.all([
+    sb.from('photos').select('*').eq('session_id', currentClientRow.session_id).order('created_at', {ascending:false}),
+    sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id),
+    sb.from('sessions').select('max_selections').eq('id', currentClientRow.session_id).single()
   ]);
 
-  currentMaxSelections = sessData?.max_selections || null;
-  const favSet = new Set((favs||[]).map(f=>f.photo_id));
-  const terminado = currentClientRow.selection_done;
-  document.getElementById('cl-user-badge').textContent = currentClientRow.name;
+  // Si alguna tabla falla o viene vacía, le inyectamos un valor seguro por defecto
+  const photos = resPhotos?.data || [];
+  const favs = resFavs?.data || [];
+  const sessData = resSession?.data || null;
 
-  // Si hay un límite, añadimos el "de X" al texto (Ej: Tienes 3 de 15 seleccionadas)
+  currentMaxSelections = sessData?.max_selections || null;
+  const favSet = new Set(favs.map(f => f.photo_id));
+  const terminado = currentClientRow.selection_done;
+  
+  document.getElementById('cl-user-badge').textContent = currentClientRow.name || '';
+
   let limitText = currentMaxSelections ? ` de ${currentMaxSelections}` : '';
 
   let html = `
-    <div class="client-hero"><h2>Bienvenido, <em>${escHtml(currentClientRow.name)}</em></h2><p>Toca el corazón para elegir tus fotos, o pulsa sobre la imagen para verla grande.</p></div>
+    <div class="client-hero">
+      <h2>Bienvenido, <em>${escHtml(currentClientRow.name)}</em></h2>
+      <p>Toca el corazón para elegir tus fotos, o pulsa sobre la imagen para verla grande.</p>
+    </div>
     <div style="text-align:center;margin-bottom:32px">
       <div class="fav-counter">❤ Tienes <strong>${favSet.size}${limitText}</strong> seleccionadas</div>
       ${terminado ? 
         `<div style="color:var(--gold); font-size:14px; font-weight:500; margin-top:20px; border: 1px dashed var(--border); padding:15px; display:inline-block">✓ Has finalizado la selección con éxito. Galería optimizada.</div>` :
         `<button class="btn-primary" id="btn-finalizar" onclick="finalizarSeleccionCliente()">Finalizar y Guardar Selección</button>`
       }
-    </div><div class="client-grid">`;
+    </div>
+    <div class="client-grid">`;
 
-  for(const p of (photos||[])){
-    const isFav = favSet.has(p.id);
-    const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
-    const full = optUrl(p.url, 'q_auto,f_auto');
-    
-    html += `<div class="client-photo ${isFav?'favorited':''}">
-      <img src="${thumb}" loading="lazy" onclick="openLightbox('${full}')"/>
-      ${terminado ? '' : `<div class="heart" onclick="toggleFav('${p.id}')">${isFav?'❤️':'🤍'}</div>`}
-    </div>`;
+  if (photos.length === 0) {
+    html += `<p style="grid-column: 1/-1; text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px;">Aún no se han subido fotografías a este álbum.</p>`;
+  } else {
+    for(const p of photos){
+      if (!p || !p.url) continue;
+      const isFav = favSet.has(p.id);
+      const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
+      const full = optUrl(p.url, 'q_auto,f_auto');
+      
+      html += `<div class="client-photo ${isFav?'favorited':''}">
+        <img src="${thumb}" loading="lazy" onclick="openLightbox('${full}')"/>
+        ${terminado ? '' : `<div class="heart" onclick="toggleFav('${p.id}')">${isFav?'❤️':'🤍'}</div>`}
+      </div>`;
+    }
   }
+  
   html += '</div>';
   body.innerHTML = html;
 }
 
 async function finalizarSeleccionCliente(){
-  const {data: favs} = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
-  const idsFavoritos = (favs||[]).map(f => f.photo_id);
+  const resFavs = await sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id);
+  const favs = resFavs?.data || [];
+  const idsFavoritos = favs.map(f => f.photo_id);
+  
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía antes de finalizar."); return; }
   if(!confirm(`Vas a guardar ${idsFavoritos.length} fotos favoritas. Las descartadas se eliminarán para liberar espacio en la nube. ¿Confirmas?`)) return;
   
@@ -890,21 +911,20 @@ async function finalizarSeleccionCliente(){
   }
 }
 
-// 💥 MODIFICADO: Pone un bloqueo si se alcanza el límite
+// 💥 MODIFICADO CON COMPROBACIÓN SEGURA
 async function toggleFav(photoId){
-  const {data:favs} = await sb.from('favorites').select('*').eq('client_id',currentClientRow.id);
+  const resFavs = await sb.from('favorites').select('*').eq('client_id', currentClientRow.id);
+  const favs = resFavs?.data || [];
   const isFav = favs.find(f => f.photo_id === photoId);
 
-  // Si la foto ya estaba marcada, la desmarcamos sin problema
   if(isFav){ 
-    await sb.from('favorites').eq('id',isFav.id).delete(); 
+    await sb.from('favorites').eq('id', isFav.id).delete(); 
   } else { 
-    // Si NO estaba marcada, comprobamos si ha tocado techo antes de dejarle marcarla
     if(currentMaxSelections && favs.length >= currentMaxSelections){
       alert(`¡Límite alcanzado!\n\nTu pack incluye un máximo de ${currentMaxSelections} fotos. Debes desmarcar alguna para poder elegir esta.`);
-      return; // El "return" corta de golpe la función y el corazón no se ilumina
+      return; 
     }
-    await sb.from('favorites').insert({client_id:currentClientRow.id, photo_id:photoId}); 
+    await sb.from('favorites').insert({client_id: currentClientRow.id, photo_id: photoId}); 
   }
   renderClientGallery();
 }
