@@ -716,7 +716,8 @@ async function deleteSession(id, name){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            // 💥 AQUÍ ESPERAMOS PACIENTEMENTE A QUE BORRE UNA ANTES DE PASAR A LA SIGUIENTE
+            await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_id: public_id })
@@ -802,7 +803,6 @@ async function createClient(){
 
 async function loadClientView(){ showScreen('client'); renderClientGallery(); }
 
-// 💥 AQUÍ ESTÁ LA SOLUCIÓN DEL LÍMITE CON EL "TRUCO DEL ASTERISCO"
 async function renderClientGallery(){
   const body = document.getElementById('cl-body');
   body.innerHTML = '<div class="loading">Abriendo tu álbum privado…</div>';
@@ -820,14 +820,13 @@ async function renderClientGallery(){
   const [resPhotos, resFavs, resSession] = await Promise.all([
     sb.from('photos').select('*').eq('session_id', currentClientRow.session_id).order('created_at', {ascending:false}),
     sb.from('favorites').select('photo_id').eq('client_id', currentClientRow.id),
-    sb.from('sessions').select('*').eq('id', currentClientRow.session_id) // <- El asterisco puentea el error de la caché
+    sb.from('sessions').select('*').eq('id', currentClientRow.session_id)
   ]);
 
   const photos = resPhotos?.data || [];
   const favs = resFavs?.data || [];
-  const sessData = resSession?.data?.[0] || null; // <- Evitamos usar .single() por si acaso
+  const sessData = resSession?.data?.[0] || null;
 
-  // Nos aseguramos de convertirlo a número puro
   currentMaxSelections = sessData?.max_selections ? parseInt(sessData.max_selections) : null;
   
   const favSet = new Set(favs.map(f => f.photo_id));
@@ -897,7 +896,8 @@ async function finalizarSeleccionCliente(){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            // 💥 AQUÍ ESPERAMOS PACIENTEMENTE TAMBIÉN
+            await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_id: public_id })
