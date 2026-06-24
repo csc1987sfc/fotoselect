@@ -706,7 +706,8 @@ async function deleteSession(id, name){
     const {data: fotos} = await sb.from('photos').select('url').eq('session_id', id);
 
     if (fotos && fotos.length > 0) {
-      for(let foto of fotos) {
+      // PREPARAMOS TODOS LOS BORRADOS A LA VEZ
+      const promesasBorrado = fotos.map(foto => {
         if(foto.url) {
           let public_id = "";
           let urlParts = foto.url.split('/upload/');
@@ -716,15 +717,18 @@ async function deleteSession(id, name){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            // 💥 AQUÍ ESPERAMOS PACIENTEMENTE A QUE BORRE UNA ANTES DE PASAR A LA SIGUIENTE
-            await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_id: public_id })
             }).catch(e=>{});
           }
         }
-      }
+        return Promise.resolve();
+      });
+
+      // ESPERAMOS A QUE TODAS SE BORREN EN CLOUDINARY EN PARALELO
+      await Promise.all(promesasBorrado);
     }
 
     const { error } = await sb.from('sessions').eq('id', id).delete();
@@ -879,14 +883,15 @@ async function finalizarSeleccionCliente(){
   if(!confirm(`Vas a guardar ${idsFavoritos.length} fotos favoritas. Las descartadas se eliminarán para liberar espacio en la nube. ¿Confirmas?`)) return;
   
   const btn = document.getElementById('btn-finalizar');
-  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección y borrando descartes…'; }
+  if(btn) { btn.disabled = true; btn.textContent = 'Procesando y liberando espacio (tomará un par de segundos)…'; }
 
   try {
     const {data: todasLasFotos} = await sb.from('photos').select('id, url').eq('session_id', currentClientRow.session_id);
     const descartes = (todasLasFotos||[]).filter(p => !idsFavoritos.includes(p.id));
 
     if (descartes.length > 0) { 
-      for(let foto of descartes) {
+      // 1. PREPARAMOS TODOS LOS BORRADOS PARA DISPARARLOS A LA VEZ
+      const promesasDeBorrado = descartes.map(foto => {
         if(foto.url) {
           let public_id = "";
           let urlParts = foto.url.split('/upload/');
@@ -896,18 +901,26 @@ async function finalizarSeleccionCliente(){
             public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
           }
           if(public_id) {
-            // 💥 AQUÍ ESPERAMOS PACIENTEMENTE TAMBIÉN
-            await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            // Disparamos la petición a la vez para que el cliente no espere
+            return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_id: public_id })
             }).catch(e=>{});
           }
         }
-      }
+        return Promise.resolve();
+      });
+
+      // 2. MAGIA: ESPERAMOS A QUE TODAS TERMINEN AL MISMO TIEMPO
+      await Promise.all(promesasDeBorrado);
+      
+      // 3. UNA VEZ LIMPIO CLOUDINARY, BORRAMOS DE LA BASE DE DATOS
       const idsDescartes = descartes.map(d => d.id);
       await sb.from('photos').in('id', idsDescartes).delete(); 
     }
+    
+    // 4. ACTUALIZAMOS EL ESTADO DEL CLIENTE
     await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
     
     currentClientRow.selection_done = true;
