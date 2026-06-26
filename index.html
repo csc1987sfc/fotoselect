@@ -335,7 +335,7 @@ body{background:var(--bg);color:var(--text);font-family:'Jost',sans-serif;font-w
     <h3>Crear acceso para cliente</h3>
     <p style="font-size:12px; color:var(--muted); margin-bottom:16px;">El sistema generará un código seguro. Dáselo a tu cliente para que se registre con su propio email y contraseña.</p>
     <div class="field"><label>Nombre de la galería o cliente</label><input type="text" id="client-name" placeholder="Ej: Boda de Carlos y Ana"/></div>
-    <button class="btn-primary" onclick="createClient()">Generar Código Mágico</button>
+    <button class="btn-primary" onclick="createClient()">Generar código cliente</button>
   </div>
 </div>
 
@@ -355,7 +355,13 @@ let toastT;
 
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
 function showScreen(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('screen-'+id).classList.add('active'); }
-function switchTab(t){ document.getElementById('tab-login').style.display = t==='login'?'':'none'; document.getElementById('tab-register').style.display = t==='register'?'':'none'; }
+function switchTab(t){ 
+  document.getElementById('tab-login').style.display = t==='login'?'':'none'; 
+  document.getElementById('tab-register').style.display = t==='register'?'':'none'; 
+  const tabs = document.querySelectorAll('.auth-tab');
+  if(t==='login'){ tabs[0].classList.add('active'); tabs[1].classList.remove('active'); }
+  else { tabs[1].classList.add('active'); tabs[0].classList.remove('active'); }
+}
 function setRole(r, el){ currentRole=r; document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); }
 function showErr(id,msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
 function hideErr(id){ document.getElementById(id).classList.remove('show'); }
@@ -773,18 +779,35 @@ async function createSession(){
 
 async function createClient(){
   const name=document.getElementById('client-name').value.trim();
-  if(!name) return;
+  if(!name) {
+    alert("Por favor, escribe un nombre para el cliente.");
+    return;
+  }
+
+  const btn = document.querySelector('#modal-client .btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Generando...';
 
   const code = 'CLI-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
-  await sb.from('clients').insert({
+  const { error } = await sb.from('clients').insert({
       photographer_id: currentUser.id,
       session_id: currentSession.id,
       name: name,
       access_code: code,
       selection_done: false
   });
+
+  btn.disabled = false;
+  btn.textContent = 'Generar código cliente';
+
+  if(error) { 
+      alert("❌ Error de base de datos.\n\n¿Añadiste la columna 'access_code' en Supabase como te dije en el paso anterior?\n\nDetalle técnico: " + error.message); 
+      return; 
+  }
+
   closeModal('modal-client');
+  document.getElementById('client-name').value = ''; 
   renderSessionDetail();
 }
 
