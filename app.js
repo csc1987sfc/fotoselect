@@ -434,7 +434,10 @@ async function renderSessionDetail(){
       <td>${escHtml(c.name)}</td>
       <td>${emailText}</td>
       <td>${accesoText}</td>
-      <td><span style="color:${c.selection_done?'#c9a96e':'#7a7268'}; font-weight:500">${c.selection_done ? '🌟 FINALIZADO' : '⏳ En proceso'}</span></td>
+      <td>
+        <span style="color:${c.selection_done?'#c9a96e':'#7a7268'}; font-weight:500">${c.selection_done ? '🌟 FINALIZADO' : '⏳ En proceso'}</span>
+        ${c.selection_done ? `<button class="btn-sm" style="margin-left:8px; border-color:var(--gold); color:var(--gold); padding:4px 8px;" onclick="copiarNombresArchivos('${c.id}')">📋 Copiar nombres</button>` : ''}
+      </td>
       <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar</button></td>
     </tr>`;
   });
@@ -823,3 +826,38 @@ function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 document.addEventListener('contextmenu', function(e) {
   if(e.target.tagName === 'IMG') e.preventDefault();
 });
+
+// Función exclusiva para el fotógrafo: Copiar nombres de archivos seleccionados
+async function copiarNombresArchivos(clientId) {
+  toast('Generando lista de archivos…');
+  
+  try {
+    // 1. Buscamos los IDs de las fotos favoritas de este cliente
+    const { data: favs, error: favErr } = await sb.from('favorites').select('photo_id').eq('client_id', clientId);
+    if(favErr || !favs || favs.length === 0) { 
+      alert('No se han encontrado fotos favoritas para este cliente.'); 
+      return; 
+    }
+    
+    const idsFavoritos = favs.map(f => f.photo_id);
+    
+    // 2. Buscamos los nombres de archivo reales de esas fotos
+    const { data: fotos, error: photoErr } = await sb.from('photos').select('filename').in('id', idsFavoritos);
+    if(photoErr || !fotos || fotos.length === 0) { 
+      alert('Error al recuperar los nombres de los archivos.'); 
+      return; 
+    }
+    
+    // 3. Juntamos los nombres separados por comas (formato estándar para buscadores)
+    const listaNombres = fotos.map(f => f.filename).join(', ');
+    
+    // 4. Lo copiamos al portapapeles del ordenador automáticamente
+    await navigator.clipboard.writeText(listaNombres);
+    
+    // 5. Avisamos con una alerta estética mostrando el resultado
+    alert(`📋 ¡Lista copiada al portapapeles!\n\nYa puedes pegarla en Lightroom, Photoshop o en el buscador de carpetas de tu PC:\n\n${listaNombres}`);
+    
+  } catch (e) {
+    alert('No se pudo copiar automáticamente. Revisa los permisos de tu navegador.');
+  }
+}
