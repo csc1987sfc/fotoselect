@@ -505,13 +505,22 @@ async function deleteSession(id, name){
   if(!confirm(`⚠️ ¿Eliminar la sesión "${name}" por completo? Esto borrará TODAS las fotos de esta sesión en la nube para liberar espacio. ¿Confirmas?`)) return;
 
   const body = document.getElementById('ph-body');
-  const htmlOriginal = body.innerHTML;
-  body.innerHTML = '<div class="loading">Eliminando fotos en la nube y borrando sesión...</div>';
+  const htmlOriginal = body.innerHTML; // Guardamos la vista por si falla algo
 
   try {
     const {data: fotos} = await sb.from('photos').select('url').eq('session_id', id);
 
     if (fotos && fotos.length > 0) {
+      // PANTALLA DE CARGA GIGANTE PARA EL FOTÓGRAFO
+      body.innerHTML = `
+        <div class="loading" style="padding-top: 80px;">
+          <h3 style="font-family:'Playfair Display',serif; font-size:1.5rem; color:var(--gold); margin-bottom: 10px;">Eliminando sesión y limpiando nube...</h3>
+          <p style="color:var(--accent); font-weight:500; margin-bottom: 20px;">⚠️ IMPORTANTE: No cierres ni recargues esta pestaña hasta que termine.</p>
+          <div style="font-size: 24px; font-weight: bold; color:var(--text);" id="delete-session-progress">0 / ${fotos.length}</div>
+        </div>
+      `;
+
+      let borradas = 0;
       for (let i = 0; i < fotos.length; i += 4) {
         const lote = fotos.slice(i, i + 4);
         const promesasLote = lote.map(foto => {
@@ -535,7 +544,14 @@ async function deleteSession(id, name){
         });
         
         await Promise.all(promesasLote);
+        
+        // ACTUALIZAMOS EL CONTADOR
+        borradas += lote.length;
+        const progressEl = document.getElementById('delete-session-progress');
+        if(progressEl) progressEl.textContent = `${borradas} / ${fotos.length}`;
       }
+    } else {
+      body.innerHTML = '<div class="loading">Eliminando sesión vacía...</div>';
     }
 
     const { error } = await sb.from('sessions').eq('id', id).delete();
@@ -714,14 +730,24 @@ async function finalizarSeleccionCliente(){
   if(!idsFavoritos || idsFavoritos.length === 0){ alert("Debes marcar al menos una fotografía antes de finalizar."); return; }
   if(!confirm(`Vas a guardar ${idsFavoritos.length} fotos favoritas. Las descartadas se eliminarán para liberar espacio en la nube. ¿Confirmas?`)) return;
   
-  const btn = document.getElementById('btn-finalizar');
-  if(btn) { btn.disabled = true; btn.textContent = 'Procesando selección y limpiando nube (por favor, espera)...'; }
+  const body = document.getElementById('cl-body');
+  const htmlOriginal = body.innerHTML;
 
   try {
     const {data: todasLasFotos} = await sb.from('photos').select('id, url').eq('session_id', currentClientRow.session_id);
     const descartes = (todasLasFotos||[]).filter(p => !idsFavoritos.includes(p.id));
 
     if (descartes.length > 0) { 
+      // PANTALLA DE CARGA GIGANTE PARA EL CLIENTE
+      body.innerHTML = `
+        <div class="loading" style="padding-top: 80px;">
+          <h3 style="font-family:'Playfair Display',serif; font-size:1.5rem; color:var(--gold); margin-bottom: 10px;">Procesando y liberando espacio...</h3>
+          <p style="color:var(--accent); font-weight:500; margin-bottom: 20px;">⚠️ IMPORTANTE: No cierres ni recargues esta pestaña hasta que termine.</p>
+          <div style="font-size: 24px; font-weight: bold; color:var(--text);" id="delete-progress">0 / ${descartes.length}</div>
+        </div>
+      `;
+
+      let borradas = 0;
       for (let i = 0; i < descartes.length; i += 4) {
         const lote = descartes.slice(i, i + 4);
         const promesasLote = lote.map(foto => {
@@ -745,10 +771,17 @@ async function finalizarSeleccionCliente(){
         });
         
         await Promise.all(promesasLote);
+
+        // ACTUALIZAMOS EL CONTADOR DEL CLIENTE
+        borradas += lote.length;
+        const progressEl = document.getElementById('delete-progress');
+        if(progressEl) progressEl.textContent = `${borradas} / ${descartes.length}`;
       }
       
       const idsDescartes = descartes.map(d => d.id);
       await sb.from('photos').in('id', idsDescartes).delete(); 
+    } else {
+      body.innerHTML = '<div class="loading">Guardando selección...</div>';
     }
     
     await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
@@ -758,7 +791,7 @@ async function finalizarSeleccionCliente(){
     renderClientGallery();
   } catch(e) {
     alert('Ocurrió un imprevisto. Revisa tu conexión.');
-    if(btn) { btn.disabled = false; btn.textContent = 'Finalizar y Guardar Selección'; }
+    body.innerHTML = htmlOriginal; // Si falla la conexión, le devolvemos la pantalla normal
   }
 }
 
