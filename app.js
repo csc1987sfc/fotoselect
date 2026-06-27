@@ -212,7 +212,7 @@ async function handleRegister(){
     if(!codes||codes.length===0){ showErr('reg-err','Código de fotógrafo no válido o ya usado'); return; }
 
     if(codes[0].email && codes[0].email.toLowerCase() !== email.toLowerCase()) {
-      showErr('reg-err', 'Este código es exclusivo para el email: ' + codes[0].email + '. Usa ese para registrarte.');
+      showErr('reg-err', 'El email introducido no coincide con el correo autorizado para este código.');
       return;
     }
 
