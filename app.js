@@ -849,7 +849,7 @@ async function copiarNombresArchivos(clientId) {
     }
     
     // 3. Juntamos los nombres separados por comas (formato estándar para buscadores)
-    const listaNombres = fotos.map(f => f.filename).join(', ');
+    const listaNombres = fotos.map(f => f.filename).join(' | ');
     
     // 4. Lo copiamos al portapapeles del ordenador automáticamente
     await navigator.clipboard.writeText(listaNombres);
