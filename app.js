@@ -444,30 +444,59 @@ async function renderSessionDetail(){
 
 async function handleFiles(inputFiles){
   const files = Array.from(inputFiles);
-  toast(`Optimizando y subiendo ${files.length} imágenes...`);
-  
+  if(files.length === 0) return;
+
+  // 1. PONEMOS LA PANTALLA DE CARGA PARA QUE EL FOTÓGRAFO NO TOQUE NADA NI SE SALGA
+  const body = document.getElementById('ph-body');
+  body.innerHTML = `
+    <div class="loading" style="padding-top: 80px;">
+      <h3 style="font-family:'Playfair Display',serif; font-size:1.5rem; color:var(--gold); margin-bottom: 10px;">Procesando y subiendo ${files.length} fotos...</h3>
+      <p style="color:var(--accent); font-weight:500; margin-bottom: 20px;">⚠️ IMPORTANTE: No cierres ni recargues esta pestaña hasta que termine.</p>
+      <div style="font-size: 24px; font-weight: bold; color:var(--text);" id="upload-progress">0 / ${files.length}</div>
+    </div>
+  `;
+
   const nombreCarpeta = currentSession.name.replace(/[^a-zA-Z0-9]/g, '_');
   let subidas = 0;
 
-  for(const f of files){
-    try {
-      const blobOptimizado = await optimizarYComprimir(f);
-      const fd = new FormData(); 
-      fd.append('file', blobOptimizado, f.name.replace(/\.[^/.]+$/, "") + ".jpg"); 
-      fd.append('upload_preset', 'fotoselect');
-      fd.append('folder', `FotoSelect/${nombreCarpeta}`);
-      
-      const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
-      const d = await res.json();
-      
-      const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
-      if(photoErr) { 
-        alert("❌ ERROR AL GUARDAR FOTO EN BASE DE DATOS:\n" + JSON.stringify(photoErr)); 
-      } else {
-        subidas++;
+  // 2. MAGIA: SUBIMOS EN LOTES DE 4 EN 4 PARA IR MUCHO MÁS RÁPIDO
+  for (let i = 0; i < files.length; i += 4) {
+    const lote = files.slice(i, i + 4);
+
+    const promesasLote = lote.map(async (f) => {
+      try {
+        // Comprime la imagen
+        const blobOptimizado = await optimizarYComprimir(f);
+        const fd = new FormData(); 
+        fd.append('file', blobOptimizado, f.name.replace(/\.[^/.]+$/, "") + ".jpg"); 
+        fd.append('upload_preset', 'fotoselect');
+        fd.append('folder', `FotoSelect/${nombreCarpeta}`);
+        
+        // La envía a Cloudinary
+        const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
+        const d = await res.json();
+        
+        // La guarda en tu base de datos
+        const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
+        if(!photoErr) {
+          subidas++;
+        } else {
+          console.error("Error DB", photoErr);
+        }
+      } catch(e) { 
+        console.error("Fallo subiendo", f.name, e); 
       }
-    } catch(e) { console.error("Fallo subiendo", f.name, e); }
+    });
+
+    // Esperamos a que estas 4 fotos terminen antes de lanzar las siguientes 4
+    await Promise.all(promesasLote);
+
+    // 3. ACTUALIZAMOS EL CONTADOR EN PANTALLA PARA QUE VEA QUE AVANZA
+    const progressEl = document.getElementById('upload-progress');
+    if(progressEl) progressEl.textContent = `${subidas} / ${files.length}`;
   }
+
+  // 4. CUANDO TERMINA TODO, AVISAMOS Y RECARGAMOS LA GALERÍA NORMAL
   toast(`¡Galería actualizada! (${subidas}/${files.length} fotos) ✓`);
   renderSessionDetail();
 }
