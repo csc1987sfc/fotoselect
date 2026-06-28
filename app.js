@@ -263,12 +263,12 @@ async function handleRegister(){
                 return;
             }
 
-    const {error: upErr} = await sb.from('clients').update({
-                email: email,
-                auth_user_id: authData.user.id, // ESTA ES LA LLAVE NUEVA
-                access_code: null,
+    const {error: upErr} = await sb.from('clients').eq('id', client.id).update({
+            email: email,
+            auth_user_id: authData.user.id, // ESTA ES LA LLAVE NUEVA
+            access_code: null,
             name: name || client.name
-        }).eq('id', client.id);
+        });
 
     if(upErr){ showErr('reg-err','Error guardando tus datos. Contacta con tu fotógrafo.'); return; }
 
