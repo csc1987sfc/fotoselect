@@ -187,12 +187,28 @@ async function handleLogin(){
     currentUser = data.user;
     loadPhotographerDashboard();
   } else {
-    const {data:clients,error} = await sb.from('clients').select('*').eq('email',email);
-    if(error||!clients||clients.length===0){ showErr('login-err','Cliente no encontrado'); return; }
-    const client = clients.find(c=>c.password_hash===pass);
-    if(!client){ showErr('login-err','Contraseña incorrecta'); return; }
-    currentClientRow = client;
-    loadClientView();
+   // 1. INICIO DE SESIÓN OFICIAL DE SUPABASE
+        const { data: authData, error: authError } = await sb.auth.signInWithPassword({
+            email: email,
+            password: pass
+        });
+
+        if (authError) {
+            showErr('login-err', 'Email o contraseña incorrectos');
+            return;
+        }
+
+        // 2. BUSCAMOS SU FICHA USANDO SU CARNET OFICIAL
+        const { data: clients, error: clientError } = await sb.from('clients').select('*').eq('auth_user_id', authData.user.id);
+
+        if (clientError || !clients || clients.length === 0) {
+            showErr('login-err', 'Cuenta de cliente no encontrada');
+            return;
+        }
+
+        // 3. LE DEJAMOS PASAR A SU GALERÍA
+        currentClientRow = clients[0];
+        loadClientView();
   }
 }
 
@@ -235,16 +251,28 @@ async function handleRegister(){
     if(error || !clients || clients.length===0){ showErr('reg-err','Código de cliente no válido o ya ha sido utilizado.'); return; }
 
     const client = clients[0];
-    const {error: upErr} = await sb.from('clients').eq('id', client.id).update({
-        email: email,
-        password_hash: pass,
-        access_code: null,
-        name: name || client.name 
-    });
+
+    // 1. REGISTRO OFICIAL SEGURO EN SUPABASE
+            const { data: authData, error: authError } = await sb.auth.signUp({
+                email: email,
+                password: pass
+            });
+
+            if (authError) {
+                showErr('reg-err', 'Error de seguridad: ' + authError.message);
+                return;
+            }
+
+    const {error: upErr} = await sb.from('clients').update({
+                email: email,
+                auth_user_id: authData.user.id, // ESTA ES LA LLAVE NUEVA
+                access_code: null,
+            name: name || client.name
+        }).eq('id', client.id);
 
     if(upErr){ showErr('reg-err','Error guardando tus datos. Contacta con tu fotógrafo.'); return; }
 
-    currentClientRow = { ...client, email: email, password_hash: pass, access_code: null };
+    currentClientRow = { ...client, email: email, access_code: null };
     loadClientView();
   }
 }
