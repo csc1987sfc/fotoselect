@@ -659,15 +659,13 @@ async function createClient(){
 
   const code = 'CLI-' + Math.random().toString(36).substring(2, 6).toUpperCase();
   const emailTemporal = 'pendiente-' + code.toLowerCase() + '@cliente.com';
-  const passTemporal = 'pendiente';
 
   const { error } = await sb.from('clients').insert({
       photographer_id: currentUser.id,
       session_id: currentSession.id,
       name: name,
       access_code: code,
-      email: emailTemporal,         
-      password_hash: passTemporal,  
+      email: emailTemporal,           
       selection_done: false
   });
 
