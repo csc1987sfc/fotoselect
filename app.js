@@ -854,17 +854,30 @@ async function toggleFav(photoId){
   if(session){ 
     currentUser = session.user; 
     
-    // LA NUEVA ADUANA: Comprobamos si el que entra tiene ficha de cliente
+    // 1. PRIMERA ADUANA: ¿Es un FOTÓGRAFO oficial? (Buscamos en su tabla)
+    const { data: profile } = await sb.from('profiles').select('id').eq('id', currentUser.id).single();
+    
+    if (profile) {
+        // Sí, está en la lista de jefes. Le abrimos su panel.
+        loadPhotographerDashboard();
+        return;
+    }
+
+    // 2. SEGUNDA ADUANA: ¿Es un CLIENTE?
     const { data: clientes } = await sb.from('clients').select('*').eq('auth_user_id', currentUser.id);
     
     if (clientes && clientes.length > 0) {
-        // Es un cliente: lo mandamos a su galería privada
+        // Sí, es un cliente válido. Lo mandamos a su galería.
         currentClientRow = clientes[0];
         loadClientView();
-    } else {
-        // Es el fotógrafo: lo mandamos al panel de control
-        loadPhotographerDashboard(); 
+        return;
     }
+
+    // 3. PROTOCOLO DE SEGURIDAD: Si falla la lectura o no es ninguno de los dos...
+    // ¡Lo echamos a la calle por seguridad! Nada de asumir que es el jefe.
+    sb.auth.signOut();
+    showScreen('auth');
+    
   } else { 
     showScreen('auth'); 
   }
