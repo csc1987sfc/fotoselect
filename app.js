@@ -280,8 +280,16 @@ async function handleRegister(){
 function logout(){ sb.auth.signOut(); currentUser=null; currentClientRow=null; currentSession=null; showScreen('auth'); }
 
 async function renderAdminPanel(){
-  const body = document.getElementById('admin-body');
-  body.innerHTML = '<div class="loading">Cargando datos comerciales…</div>';
+    // CONTROL DE ADUANA: Si no es tu correo de fotógrafo, lo echamos inmediatamente
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user || user.email !== 'csc87sfc@gmail.com') {
+        alert("Acceso denegado. Esta zona es exclusiva para el fotógrafo jefe.");
+        loadClientView(); // Lo mandamos de vuelta a su galería de cliente
+        return;
+    }
+
+    const body = document.getElementById('admin-body');
+    body.innerHTML = '<div class="loading">Cargando datos comerciales...</div>';
   
   const [{data:photographers}, {data:pendingCodes}] = await Promise.all([
     sb.from('profiles').select('*').order('created_at',{ascending:false}),
