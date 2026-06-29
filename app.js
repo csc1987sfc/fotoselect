@@ -851,7 +851,23 @@ async function toggleFav(photoId){
 
 (async()=>{
   const {data:{session}} = await sb.auth.getSession();
-  if(session){ currentUser=session.user; loadPhotographerDashboard(); } else { showScreen('auth'); }
+  if(session){ 
+    currentUser = session.user; 
+    
+    // LA NUEVA ADUANA: Comprobamos si el que entra tiene ficha de cliente
+    const { data: clientes } = await sb.from('clients').select('*').eq('auth_user_id', currentUser.id);
+    
+    if (clientes && clientes.length > 0) {
+        // Es un cliente: lo mandamos a su galería privada
+        currentClientRow = clientes[0];
+        loadClientView();
+    } else {
+        // Es el fotógrafo: lo mandamos al panel de control
+        loadPhotographerDashboard(); 
+    }
+  } else { 
+    showScreen('auth'); 
+  }
 })();
 
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
