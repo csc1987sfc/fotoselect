@@ -168,14 +168,17 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
-    let {data:profile} = await sb.from('profiles').select('*').eq('id',data.user.id).single();
+    // Aquí el blindaje: Quitamos el .single() engañoso y contamos los resultados
+    let {data:perfiles} = await sb.from('profiles').select('*').eq('id',data.user.id);
     
-    if(!profile) {
-      showErr('login-err','⛔ Tu cuenta ha sido eliminada de la plataforma.');
+    if(!perfiles || perfiles.length === 0) {
+      showErr('login-err','⛔ Acceso denegado. No eres un fotógrafo oficial.');
       await sb.auth.signOut();
       currentUser = null;
       return;
     }
+
+    let profile = perfiles[0];
 
     if(profile && profile.active === false) {
       showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
@@ -854,27 +857,24 @@ async function toggleFav(photoId){
   if(session){ 
     currentUser = session.user; 
     
-    // 1. PRIMERA ADUANA: ¿Es un FOTÓGRAFO oficial? (Buscamos en su tabla)
-    const { data: profile } = await sb.from('profiles').select('id').eq('id', currentUser.id).single();
+    // 1. PRIMERA ADUANA: ¿Es FOTÓGRAFO oficial? (Blindado: exigimos que haya datos)
+    const { data: perfiles } = await sb.from('profiles').select('id').eq('id', currentUser.id);
     
-    if (profile) {
-        // Sí, está en la lista de jefes. Le abrimos su panel.
+    if (perfiles && perfiles.length > 0) {
         loadPhotographerDashboard();
         return;
     }
 
-    // 2. SEGUNDA ADUANA: ¿Es un CLIENTE?
+    // 2. SEGUNDA ADUANA: ¿Es un CLIENTE? (Blindado)
     const { data: clientes } = await sb.from('clients').select('*').eq('auth_user_id', currentUser.id);
     
     if (clientes && clientes.length > 0) {
-        // Sí, es un cliente válido. Lo mandamos a su galería.
         currentClientRow = clientes[0];
         loadClientView();
         return;
     }
 
-    // 3. PROTOCOLO DE SEGURIDAD: Si falla la lectura o no es ninguno de los dos...
-    // ¡Lo echamos a la calle por seguridad! Nada de asumir que es el jefe.
+    // 3. PROTOCOLO DE SEGURIDAD
     sb.auth.signOut();
     showScreen('auth');
     
