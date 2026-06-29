@@ -817,7 +817,7 @@ async function finalizarSeleccionCliente(){
     
     currentClientRow.selection_done = true;
     alert('¡Selección completada! Tu fotógrafo ha sido avisado y el espacio se ha liberado.');
-    renderClientGallery();
+    window.location.reload();
   } catch(e) {
     alert('Ocurrió un imprevisto. Revisa tu conexión.');
     body.innerHTML = htmlOriginal; // Si falla la conexión, le devolvemos la pantalla normal
