@@ -857,20 +857,21 @@ async function toggleFav(photoId){
   if(session){ 
     currentUser = session.user; 
     
-    // 1. PRIMERA ADUANA: ¿Es FOTÓGRAFO oficial? (Blindado: exigimos que haya datos)
-    const { data: perfiles } = await sb.from('profiles').select('id').eq('id', currentUser.id);
-    
-    if (perfiles && perfiles.length > 0) {
-        loadPhotographerDashboard();
-        return;
-    }
-
-    // 2. SEGUNDA ADUANA: ¿Es un CLIENTE? (Blindado)
+    // 1. PRIMERA ADUANA: Comprobamos PRIMERO si es un CLIENTE
     const { data: clientes } = await sb.from('clients').select('*').eq('auth_user_id', currentUser.id);
     
     if (clientes && clientes.length > 0) {
         currentClientRow = clientes[0];
         loadClientView();
+        return; // Si es cliente, se queda aquí y no sigue leyendo
+    }
+
+    // 2. SEGUNDA ADUANA: ¿Es FOTÓGRAFO oficial?
+    const { data: perfiles } = await sb.from('profiles').select('*').eq('id', currentUser.id);
+    
+    // Le exigimos que exista Y que su nombre no sea NULL (para bloquear a los infiltrados)
+    if (perfiles && perfiles.length > 0 && perfiles[0].username) {
+        loadPhotographerDashboard();
         return;
     }
 
