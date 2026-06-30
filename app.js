@@ -476,7 +476,7 @@ async function renderSessionDetail(){
       <td>${accesoText}</td>
       <td>
         <span style="color:${c.selection_done?'#c9a96e':'#7a7268'}; font-weight:500">${c.selection_done ? '🌟 FINALIZADO' : '⏳ En proceso'}</span>
-        ${c.selection_done ? `<button class="btn-sm" style="margin-left:8px; border-color:var(--gold); color:var(--gold); padding:4px 8px;" onclick="copiarNombresArchivos('${c.id}')">📋 Copiar nombres</button>` : ''}
+        ${c.selection_done ? `<button class="btn-sm" style="margin-left:8px; border-color:var(--gold); color:var(--gold); padding:4px 8px;" onclick="copiarNombresArchivos('${c.id}')">📋 Copiar fotos</button>` : ''}
       </td>
       <td><button class="btn-sm danger" onclick="deleteClient('${c.id}')">Eliminar</button></td>
     </tr>`;
