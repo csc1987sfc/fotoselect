@@ -181,6 +181,7 @@ async function handleLogin(){
     
     // EXIGIMOS que exista perfil Y que el nombre NO sea nulo (así bloqueamos a los clientes colados)
     if(!perfiles || perfiles.length === 0 || !perfiles[0].username) {
+      alert('⛔ Acceso denegado. Área exclusiva para fotógrafos.'); // <-- AÑADE ESTO
       showErr('login-err','⛔ Acceso denegado. Área exclusiva para fotógrafos.');
       await sb.auth.signOut();
       currentUser = null;
@@ -190,6 +191,7 @@ async function handleLogin(){
     let profile = perfiles[0];
 
     if(profile && profile.active === false) {
+      alert('⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.'); // <-- AÑADE ESTO
       showErr('login-err','⛔ Tu cuenta se encuentra suspendida por impago. Contacta con soporte.');
       await sb.auth.signOut();
       currentUser = null;
