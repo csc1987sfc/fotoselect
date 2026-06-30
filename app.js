@@ -168,11 +168,12 @@ async function handleLogin(){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
     if(error){ showErr('login-err','Credenciales incorrectas'); return; }
     
-    // Aquí el blindaje: Quitamos el .single() engañoso y contamos los resultados
+    // BLINDAJE CONTRA EL TRIGGER INVISIBLE
     let {data:perfiles} = await sb.from('profiles').select('*').eq('id',data.user.id);
     
-    if(!perfiles || perfiles.length === 0) {
-      showErr('login-err','⛔ Acceso denegado. No eres un fotógrafo oficial.');
+    // EXIGIMOS que exista perfil Y que el nombre NO sea nulo (así bloqueamos a los clientes colados)
+    if(!perfiles || perfiles.length === 0 || !perfiles[0].username) {
+      showErr('login-err','⛔ Acceso denegado. Área exclusiva para fotógrafos.');
       await sb.auth.signOut();
       currentUser = null;
       return;
