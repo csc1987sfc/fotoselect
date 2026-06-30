@@ -313,7 +313,11 @@ async function renderAdminPanel(){
   ]);
 
   let phHtml = '';
-  (photographers||[]).forEach(p=>{
+  
+  // Filtramos la lista para ignorar a los clientes (que tienen el nombre vacío por el trigger)
+  const fotografosReales = (photographers || []).filter(p => p.username && p.username.trim() !== '');
+
+  fotografosReales.forEach(p=>{
     const isSuspended = p.active === false;
     const isAdmin = p.email === 'csc87sfc@gmail.com'; 
 
