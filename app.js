@@ -578,7 +578,10 @@ async function deleteSession(id, name){
             if(public_id) {
               return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${_token()}`
+                },
                 body: JSON.stringify({ public_id: public_id })
               }).catch(e=>{});
             }
@@ -624,7 +627,10 @@ async function deletePhoto(id){
     if(public_id) {
       await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${_token()}`
+        },
         body: JSON.stringify({ public_id: public_id })
       }).catch(e=>{});
     }
@@ -803,7 +809,10 @@ async function finalizarSeleccionCliente(){
             if(public_id) {
               return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${_token()}`
+                },
                 body: JSON.stringify({ public_id: public_id })
               }).catch(e=>{});
             }
