@@ -162,11 +162,19 @@ async function handleLogin(){
   hideErr('login-err');
   const email=document.getElementById('login-email').value.trim();
   const pass=document.getElementById('login-pass').value;
-  if(!email||!pass){ showErr('login-err','Introduce datos'); return; }
+  if(!email||!pass){ 
+    alert('⚠️ Por favor, introduce tu correo y tu contraseña.');
+    showErr('login-err','Introduce datos'); 
+    return; 
+  }
 
   if(currentRole==='photographer'){
     const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
-    if(error){ showErr('login-err','Credenciales incorrectas'); return; }
+    if(error){ 
+      alert('❌ Acceso denegado: Usuario o contraseña incorrectos.');
+      showErr('login-err','Credenciales incorrectas'); 
+      return; 
+  }
     
     // BLINDAJE CONTRA EL TRIGGER INVISIBLE
     let {data:perfiles} = await sb.from('profiles').select('*').eq('id',data.user.id);
@@ -198,6 +206,7 @@ async function handleLogin(){
         });
 
         if (authError) {
+            alert('❌ Acceso denegado: Usuario o contraseña incorrectos.');
             showErr('login-err', 'Email o contraseña incorrectos');
             return;
         }
@@ -206,6 +215,7 @@ async function handleLogin(){
         const { data: clients, error: clientError } = await sb.from('clients').select('*').eq('auth_user_id', authData.user.id);
 
         if (clientError || !clients || clients.length === 0) {
+            alert('❌ Acceso denegado: Cuenta de cliente no encontrada.');
             showErr('login-err', 'Cuenta de cliente no encontrada');
             return;
         }
