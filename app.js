@@ -518,7 +518,6 @@ async function handleFiles(inputFiles){
   const files = Array.from(inputFiles);
   if(files.length === 0) return;
 
-  // 1. PONEMOS LA PANTALLA DE CARGA PARA QUE EL FOTÓGRAFO NO TOQUE NADA NI SE SALGA
   const body = document.getElementById('ph-body');
   body.innerHTML = `
     <div class="loading" style="padding-top: 80px;">
@@ -529,46 +528,58 @@ async function handleFiles(inputFiles){
   `;
 
   const nombreCarpeta = currentSession.name.replace(/[^a-zA-Z0-9]/g, '_');
+  const rutaCarpeta = `FotoSelect/${nombreCarpeta}`;
+
+  // 🚨 NUEVA ADUANA: PEDIMOS LA FIRMA SECRETA AL SERVIDOR
+  const resFirma = await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/firmar-subida', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${_token()}`
+    },
+    body: JSON.stringify({ folder: rutaCarpeta })
+  });
+
+  if (!resFirma.ok) {
+    alert("❌ Error de seguridad: Tu sesión caducó o no estás autorizado para subir fotos.");
+    renderSessionDetail();
+    return;
+  }
+  
+  // Extraemos la firma
+  const { signature, timestamp, apiKey } = await resFirma.json();
   let subidas = 0;
 
-  // 2. MAGIA: SUBIMOS EN LOTES DE 4 EN 4 PARA IR MUCHO MÁS RÁPIDO
   for (let i = 0; i < files.length; i += 4) {
     const lote = files.slice(i, i + 4);
 
     const promesasLote = lote.map(async (f) => {
       try {
-        // Comprime la imagen
         const blobOptimizado = await optimizarYComprimir(f);
         const fd = new FormData(); 
         fd.append('file', blobOptimizado, f.name.replace(/\.[^/.]+$/, "") + ".jpg"); 
-        fd.append('upload_preset', 'fotoselect');
-        fd.append('folder', `FotoSelect/${nombreCarpeta}`);
         
-        // La envía a Cloudinary
+        // 🚨 USAMOS LA FIRMA SECRETA EN LUGAR DEL PASE PÚBLICO
+        fd.append('api_key', apiKey);
+        fd.append('timestamp', timestamp);
+        fd.append('signature', signature);
+        fd.append('folder', rutaCarpeta);
+        
         const res = await fetch('https://api.cloudinary.com/v1_1/dgp3tlqtq/image/upload',{method:'POST',body:fd});
         const d = await res.json();
         
-        // La guarda en tu base de datos
-        const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
-        if(!photoErr) {
-          subidas++;
-        } else {
-          console.error("Error DB", photoErr);
+        if (d.secure_url) {
+          const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
+          if(!photoErr) subidas++;
         }
-      } catch(e) { 
-        console.error("Fallo subiendo", f.name, e); 
-      }
+      } catch(e) { console.error("Fallo subiendo", f.name, e); }
     });
 
-    // Esperamos a que estas 4 fotos terminen antes de lanzar las siguientes 4
     await Promise.all(promesasLote);
-
-    // 3. ACTUALIZAMOS EL CONTADOR EN PANTALLA PARA QUE VEA QUE AVANZA
     const progressEl = document.getElementById('upload-progress');
     if(progressEl) progressEl.textContent = `${subidas} / ${files.length}`;
   }
 
-  // 4. CUANDO TERMINA TODO, AVISAMOS Y RECARGAMOS LA GALERÍA NORMAL
   toast(`¡Galería actualizada! (${subidas}/${files.length} fotos) ✓`);
   renderSessionDetail();
 }
