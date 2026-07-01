@@ -42,7 +42,8 @@ const sbAuth = {
     try{
       const r = await fetch(`${SURL}/auth/v1/signup`,{method:'POST',headers:{'apikey':SKEY,'Content-Type':'application/json'},body:JSON.stringify({email,password,data:meta||{}})});
       const d = await r.json();
-      if(d.error||d.error_description) return {data:null,error:{message:d.error_description||d.error}};
+      // Ahora detecta cualquier tipo de fallo, se llame error, msg o code
+      if(!r.ok || d.error || d.code) return {data:null,error:{message:d.msg||d.error_description||d.error||'Error al registrar'}};
       if(d.access_token){ _saveSession({access_token:d.access_token,user:d.user}); _notify('SIGNED_IN',_session); }
       return {data:{user:d.user},error:null};
     }catch(e){return {data:null,error:{message:e.message}};}
@@ -51,7 +52,8 @@ const sbAuth = {
     try{
       const r = await fetch(`${SURL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'apikey':SKEY,'Content-Type':'application/json'},body:JSON.stringify({email,password})});
       const d = await r.json();
-      if(d.error||d.error_description) return {data:null,error:{message:d.error_description||d.error||'Credenciales incorrectas'}};
+      // Escudo protector: Si la petición falla, activa la alarma automáticamente
+      if(!r.ok || d.error || d.code) return {data:null,error:{message:d.msg||d.error_description||d.error||'Credenciales incorrectas'}};
       _saveSession({access_token:d.access_token,refresh_token:d.refresh_token,user:d.user});
       _notify('SIGNED_IN',_session);
       return {data:{user:d.user,session:_session},error:null};
