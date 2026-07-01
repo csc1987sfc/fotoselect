@@ -100,7 +100,18 @@ function sbFrom(table){
   return b;
 }
 
-const sb = { auth: sbAuth, from: sbFrom };
+const sb = { 
+  auth: sbAuth, 
+  from: sbFrom,
+  rpc: async function(fn, args={}){
+    try{
+      const r = await fetch(`${SURL}/rest/v1/rpc/${fn}`,{method:'POST',headers:_headers(),body:JSON.stringify(args)});
+      const d = await r.json();
+      if(d&&d.code) return {data:null,error:d};
+      return {data:d,error:null};
+    }catch(e){return {data:null,error:{message:e.message}};}
+  }
+};
 
 let currentUser = null;
 let currentRole = 'photographer'; 
@@ -242,7 +253,7 @@ async function handleRegister(){
   if(currentRole === 'photographer'){
     if(!name){ showErr('reg-err','Introduce el nombre de tu estudio'); return; }
     
-    const {data:codes} = await sb.from('invite_codes').select('*').eq('code',code).eq('used',false);
+    const {data:codes} = await sb.rpc('validar_codigo_fotografo', { codigo_provisto: code });
     if(!codes||codes.length===0){ showErr('reg-err','Código de fotógrafo no válido o ya usado'); return; }
 
     if(codes[0].email && codes[0].email.toLowerCase() !== email.toLowerCase()) {
@@ -265,7 +276,7 @@ async function handleRegister(){
     loadPhotographerDashboard();
 
   } else {
-    const {data:clients, error} = await sb.from('clients').select('*').eq('access_code',code);
+    const {data:clients, error} = await sb.rpc('validar_codigo_cliente', { codigo_provisto: code });
     if(error || !clients || clients.length===0){ showErr('reg-err','Código de cliente no válido o ya ha sido utilizado.'); return; }
 
     const client = clients[0];
