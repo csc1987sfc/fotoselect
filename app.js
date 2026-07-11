@@ -880,8 +880,9 @@ async function finalizarSeleccionCliente(){
       body.innerHTML = '<div class="loading">Guardando selección...</div>';
     }
     
-    await sb.from('clients').eq('id', currentClientRow.id).update({ selection_done: true, selection_done_at: new Date().toISOString() });
-    
+    const { error: finErr } = await sb.rpc('finalizar_seleccion_cliente');
+    if (finErr) { throw new Error('No se pudo guardar el estado final: ' + finErr.message); }
+
     currentClientRow.selection_done = true;
     alert('¡Selección completada! Tu fotógrafo ha sido avisado y el espacio se ha liberado.');
     window.location.reload();
