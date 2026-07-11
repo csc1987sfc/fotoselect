@@ -264,13 +264,16 @@ async function handleRegister(){
     const {data,error} = await sb.auth.signUp({email,password:pass});
     if(error){ showErr('reg-err',error.message); return; }
 
-    const {data: existing} = await sb.from('profiles').select('id').eq('id', data.user.id).single();
-    if (existing) {
-      await sb.from('profiles').eq('id', data.user.id).update({username:name, email:email, active:true});
-    } else {
-      await sb.from('profiles').insert({id:data.user.id, username:name, email:email, active:true});
+    const {data: canjeado, error: canjeError} = await sb.rpc('canjear_codigo_fotografo', {
+      codigo_provisto: code,
+      nuevo_email: email,
+      nuevo_username: name
+    });
+    if(canjeError || !canjeado || canjeado.length === 0){
+      showErr('reg-err', 'No se pudo activar tu cuenta: ' + (canjeError?.message || 'código no válido'));
+      await sb.auth.signOut();
+      return;
     }
-    await sb.from('invite_codes').eq('id',codes[0].id).update({used:true, used_by:data.user.id});
 
     currentUser = data.user;
     loadPhotographerDashboard();
@@ -292,16 +295,19 @@ async function handleRegister(){
                 return;
             }
 
-    const {error: upErr} = await sb.from('clients').eq('id', client.id).update({
-            email: email,
-            auth_user_id: authData.user.id, // ESTA ES LA LLAVE NUEVA
-            access_code: null,
-            name: name || client.name
-        });
+    const { data: canjeado, error: canjeError } = await sb.rpc('canjear_codigo_cliente', {
+        codigo_provisto: code,
+        nuevo_email: email,
+        nuevo_nombre: name
+    });
 
-    if(upErr){ showErr('reg-err','Error guardando tus datos. Contacta con tu fotógrafo.'); return; }
+    if(canjeError || !canjeado || canjeado.length === 0){
+      showErr('reg-err','Error guardando tus datos. Contacta con tu fotógrafo.');
+      await sb.auth.signOut();
+      return;
+    }
 
-    currentClientRow = { ...client, email: email, access_code: null };
+    currentClientRow = canjeado[0];
     loadClientView();
   }
 }
