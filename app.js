@@ -533,27 +533,25 @@ async function handleFiles(inputFiles){
     </div>
   `;
 
-  const nombreCarpeta = currentSession.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const rutaCarpeta = `FotoSelect/${nombreCarpeta}`;
-
-  // 🚨 NUEVA ADUANA: PEDIMOS LA FIRMA SECRETA AL SERVIDOR
+  // 🚨 NUEVA ADUANA: PEDIMOS LA FIRMA SECRETA AL SERVIDOR (la carpeta la decide el servidor)
   const resFirma = await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/firmar-subida', {
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${_token()}`
     },
-    body: JSON.stringify({ folder: rutaCarpeta })
+    body: JSON.stringify({ session_id: currentSession.id })
   });
 
   if (!resFirma.ok) {
-    alert("❌ Error de seguridad: Tu sesión caducó o no estás autorizado para subir fotos.");
+    const errData = await resFirma.json().catch(()=>({}));
+    alert("❌ Error de seguridad: " + (errData.error || "Tu sesión caducó o no estás autorizado para subir fotos."));
     renderSessionDetail();
     return;
   }
-  
-  // Extraemos la firma
-  const { signature, timestamp, apiKey } = await resFirma.json();
+
+  // Extraemos la firma (la carpeta ya viene confirmada por el servidor)
+  const { signature, timestamp, apiKey, folder: rutaCarpeta } = await resFirma.json();
   let subidas = 0;
 
   for (let i = 0; i < files.length; i += 4) {
