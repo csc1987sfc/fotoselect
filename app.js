@@ -407,7 +407,16 @@ async function renderAdminPanel(){
     </div>`;
 }
 
-async function generarCodigoFotografo(){
+function generarCodigoSeguro(prefijo, longitud){
+  const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O ni 1/I/L, para evitar confusiones al copiar a mano
+  const array = new Uint8Array(longitud);
+  crypto.getRandomValues(array);
+  let resultado = prefijo + '-';
+  for (let i = 0; i < longitud; i++) {
+    resultado += caracteres[array[i] % caracteres.length];
+  }
+  return resultado;
+}
   const email = document.getElementById('admin-new-ph-email').value.trim();
   if(!email) { alert('Por favor, escribe el email del fotógrafo primero.'); return; }
 
@@ -417,7 +426,7 @@ async function generarCodigoFotografo(){
     return;
   }
 
-  const code = 'FOTO-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const code = generarCodigoSeguro('FOTO', 8);
   const {error} = await sb.from('invite_codes').insert({code: code, used: false, email: email});
   
   if(error) { alert('Error de conexión con la base de datos: ' + error.message); return; }
@@ -694,7 +703,7 @@ async function createClient(){
   btn.disabled = true;
   btn.textContent = 'Generando...';
 
-  const code = 'CLI-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+  const code = generarCodigoSeguro('CLI', 8);
   const emailTemporal = 'pendiente-' + code.toLowerCase() + '@cliente.com';
 
   const { error } = await sb.from('clients').insert({
