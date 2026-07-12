@@ -595,8 +595,7 @@ async function deleteSession(id, name){
   const htmlOriginal = body.innerHTML; // Guardamos la vista por si falla algo
 
   try {
-    const {data: fotos} = await sb.from('photos').select('url').eq('session_id', id);
-
+const {data: fotos} = await sb.from('photos').select('id, url').eq('session_id', id);
     if (fotos && fotos.length > 0) {
       // PANTALLA DE CARGA GIGANTE PARA EL FOTÓGRAFO
       body.innerHTML = `
@@ -611,26 +610,14 @@ async function deleteSession(id, name){
       for (let i = 0; i < fotos.length; i += 4) {
         const lote = fotos.slice(i, i + 4);
         const promesasLote = lote.map(foto => {
-          if(foto.url) {
-            let public_id = "";
-            let urlParts = foto.url.split('/upload/');
-            if(urlParts.length > 1) {
-              let parts = urlParts[1].split('/');
-              if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
-              public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
-            }
-            if(public_id) {
-              return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${_token()}`
-                },
-                body: JSON.stringify({ public_id: public_id })
-              }).catch(e=>{});
-            }
-          }
-          return Promise.resolve();
+          return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${_token()}`
+            },
+            body: JSON.stringify({ photo_id: foto.id })
+          }).catch(e=>{});
         });
         
         await Promise.all(promesasLote);
@@ -659,27 +646,15 @@ async function deletePhoto(id){
   if(!confirm("¿Eliminar esta foto por completo (de la galería y de Cloudinary)?")) return;
   toast('Eliminando foto...');
   
-  const { data: foto } = await sb.from('photos').select('url').eq('id', id).single();
-  if (foto && foto.url) {
-    let public_id = "";
-    const urlParts = foto.url.split('/upload/');
-    if(urlParts.length > 1) {
-      let parts = urlParts[1].split('/');
-      if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
-      public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
-    }
-    if(public_id) {
-      await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${_token()}`
-        },
-        body: JSON.stringify({ public_id: public_id })
-      }).catch(e=>{});
-    }
-  }
-  await sb.from('photos').eq('id',id).delete(); 
+  await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${_token()}`
+    },
+    body: JSON.stringify({ photo_id: id })
+  }).catch(e=>{});
+
   renderSessionDetail(); 
 }
 
@@ -842,26 +817,14 @@ async function finalizarSeleccionCliente(){
       for (let i = 0; i < descartes.length; i += 4) {
         const lote = descartes.slice(i, i + 4);
         const promesasLote = lote.map(foto => {
-          if(foto.url) {
-            let public_id = "";
-            let urlParts = foto.url.split('/upload/');
-            if(urlParts.length > 1) {
-              let parts = urlParts[1].split('/');
-              if(parts[0].startsWith('v') && !isNaN(parts[0].substring(1))) parts.shift();
-              public_id = parts.join('/').substring(0, parts.join('/').lastIndexOf('.'));
-            }
-            if(public_id) {
-              return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${_token()}`
-                },
-                body: JSON.stringify({ public_id: public_id })
-              }).catch(e=>{});
-            }
-          }
-          return Promise.resolve();
+          return fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotos', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${_token()}`
+            },
+            body: JSON.stringify({ photo_id: foto.id })
+          }).catch(e=>{});
         });
         
         await Promise.all(promesasLote);
@@ -870,10 +833,7 @@ async function finalizarSeleccionCliente(){
         borradas += lote.length;
         const progressEl = document.getElementById('delete-progress');
         if(progressEl) progressEl.textContent = `${borradas} / ${descartes.length}`;
-      }
-      
-      const idsDescartes = descartes.map(d => d.id);
-      await sb.from('photos').in('id', idsDescartes).delete(); 
+      } 
     } else {
       body.innerHTML = '<div class="loading">Guardando selección...</div>';
     }
