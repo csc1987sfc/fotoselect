@@ -417,6 +417,8 @@ function generarCodigoSeguro(prefijo, longitud){
   }
   return resultado;
 }
+
+async function generarCodigoFotografo(){
   const email = document.getElementById('admin-new-ph-email').value.trim();
   if(!email) { alert('Por favor, escribe el email del fotógrafo primero.'); return; }
 
