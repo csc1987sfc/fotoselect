@@ -446,9 +446,20 @@ async function toggleSuspensionFotografo(idFotografo, estadoActual){
 }
 
 async function borrarFotografoTotal(idFotografo){
-  if(!confirm("⚠️ ¿Eliminar al fotógrafo y sus datos para siempre?")) return;
-  const { error } = await sb.from('profiles').eq('id', idFotografo).delete();
-  if(error) { alert('Error: ' + JSON.stringify(error)); return; }
+  if(!confirm("⚠️ ¿Eliminar al fotógrafo, sus sesiones y todas sus fotos de la nube para siempre?")) return;
+  
+  const res = await fetch('https://urpjnmbhhbzeirktpzcv.supabase.co/functions/v1/borrar-fotografo', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${_token()}`
+    },
+    body: JSON.stringify({ photographer_id: idFotografo })
+  });
+
+  const data = await res.json();
+  if(!res.ok) { alert('Error: ' + (data.error || 'No se pudo completar el borrado')); return; }
+  
   renderAdminPanel();
 }
 
