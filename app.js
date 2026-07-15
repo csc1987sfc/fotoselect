@@ -812,7 +812,7 @@ async function renderClientGallery(){
       if (!p || !p.url) continue;
       const isFav = favSet.has(p.id);
       const thumb = optUrl(p.url, 'w_400,q_auto,f_auto');
-      const full = optUrl(p.url, 'q_auto,f_auto,l_marca_agua,w_400,o_40,g_center');
+      const full = optUrl(p.url, 'q_auto,f_auto/l_marca_agua/c_scale,w_400,o_40/fl_layer_apply,g_center');
       
       html += `<div class="client-photo ${isFav?'favorited':''}">
         <img src="${thumb}" loading="lazy" onclick="openLightbox('${full}')"/>
