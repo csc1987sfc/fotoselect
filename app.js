@@ -575,6 +575,7 @@ async function handleFiles(inputFiles){
   // Extraemos la firma (la carpeta ya viene confirmada por el servidor)
   const { signature, timestamp, apiKey, folder: rutaCarpeta } = await resFirma.json();
   let subidas = 0;
+  let erroresSubida = []; // NUEVO: Creamos una lista para anotar las fotos que fallan
 
   for (let i = 0; i < files.length; i += 4) {
     const lote = files.slice(i, i + 4);
@@ -585,7 +586,6 @@ async function handleFiles(inputFiles){
         const fd = new FormData(); 
         fd.append('file', blobOptimizado, f.name.replace(/\.[^/.]+$/, "") + ".jpg"); 
         
-        // 🚨 USAMOS LA FIRMA SECRETA EN LUGAR DEL PASE PÚBLICO
         fd.append('api_key', apiKey);
         fd.append('timestamp', timestamp);
         fd.append('signature', signature);
@@ -596,9 +596,18 @@ async function handleFiles(inputFiles){
         
         if (d.secure_url) {
           const {error: photoErr} = await sb.from('photos').insert({session_id:currentSession.id, url:d.secure_url, filename:f.name});
-          if(!photoErr) subidas++;
+          if(!photoErr) {
+            subidas++;
+          } else {
+            erroresSubida.push(`${f.name} (Error guardando en BD)`);
+          }
+        } else {
+          erroresSubida.push(`${f.name} (Error de Cloudinary)`);
         }
-      } catch(e) { console.error("Fallo subiendo", f.name, e); }
+      } catch(e) { 
+        console.error("Fallo subiendo", f.name, e); 
+        erroresSubida.push(f.name); // Añadimos la foto a la lista negra
+      }
     });
 
     await Promise.all(promesasLote);
@@ -606,7 +615,13 @@ async function handleFiles(inputFiles){
     if(progressEl) progressEl.textContent = `${subidas} / ${files.length}`;
   }
 
-  toast(`¡Galería actualizada! (${subidas}/${files.length} fotos) ✓`);
+  // NUEVO: Comprobamos si hubo errores y lanzamos una alerta, o damos el ok normal
+  if (erroresSubida.length > 0) {
+    alert(`⚠️ ATENCIÓN: ${erroresSubida.length} fotos no se pudieron subir:\n\n${erroresSubida.join('\n')}\n\nPor favor, vuelve a subir únicamente estas imágenes.`);
+  } else {
+    toast(`¡Galería actualizada! (${subidas}/${files.length} fotos) ✓`);
+  }
+  
   renderSessionDetail();
 }
 
